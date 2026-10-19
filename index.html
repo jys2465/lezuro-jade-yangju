@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>레저로 파크골프 방향 기록장</title>
+<meta name="description" content="레저로 스크린 파크골프 회원을 위한 코스별 방향 기록장">
+<meta name="theme-color" content="#111A39">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="파크골프기록">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/favicon-32.png">
+<link rel="preload" href="assets/fonts/NotoSansKR-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/app.css">
+<script>
+/* 시작 감시: 6초 안에 앱이 시작하지 못하면 이유를 화면에 알려 줍니다 */
+(function () {
+  var failed = [], errs = [];
+  window.addEventListener('error', function (e) {
+    var t = e.target;
+    if (t && t !== window && (t.src || t.href)) failed.push((t.src || t.href).replace(location.origin, ''));
+    else if (e.message) errs.push(e.message);
+  }, true);
+  window.addEventListener('unhandledrejection', function (e) { errs.push(String((e.reason && e.reason.message) || e.reason)); });
+  setTimeout(function () {
+    if (window.LZ && window.LZ.booted) return;
+    var el = document.getElementById('boot'); if (!el) return;
+    var h = '<h2>앱을 시작하지 못했어요</h2><p>';
+    if (failed.length) h += '불러오지 못한 파일 ' + failed.length + '개:<br><b>' + failed.slice(0, 6).join('<br>') + '</b><br><br>GitHub 저장소에 css, js, assets, icons 폴더와 그 안의 파일이 모두 올라갔는지 확인해 주세요.';
+    else if (errs.length) h += '오류: <b>' + String(errs[0]).replace(/[<>&]/g, '') + '</b>';
+    else h += '시작이 늦어지고 있어요. 인터넷이 느린지 확인하고 다시 시도해 주세요.';
+    el.innerHTML = h + '</p><button class="btn" style="max-width:260px" onclick="location.reload()">다시 시도</button>';
+  }, 6000);
+})();
+</script>
+</head>
+<body>
+<div id="boot" class="boot"><img src="assets/logo-light.png" alt="레저로 스크린 파크골프" width="200" height="100"><div class="spin" aria-hidden="true"></div><p>불러오는 중…</p></div>
+<div id="app" hidden></div>
+<div id="layer"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<noscript><p style="padding:24px">이 앱은 자바스크립트가 필요해요.</p></noscript>
+<script defer src="js/config.js"></script>
+<script defer src="js/util.js"></script>
+<script defer src="js/api.js"></script>
+<script defer src="js/pwa.js"></script>
+<script defer src="js/ui.js"></script>
+<script defer src="js/rec.js"></script>
+<script defer src="js/screens-auth.js"></script>
+<script defer src="js/screens-courses.js"></script>
+<script defer src="js/screens-holes.js"></script>
+<script defer src="js/screens-admin.js"></script>
+<script defer src="js/app.js"></script>
+</body>
+</html>
