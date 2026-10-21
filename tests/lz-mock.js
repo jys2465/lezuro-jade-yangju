@@ -72,7 +72,7 @@ function fmtDate(d, tz, fmt) {
   const Y = t.getUTCFullYear(), M = t.getUTCMonth() + 1, D = t.getUTCDate();
   return fmt.replace('yyyy', Y).replace('yy', p(Y % 100)).replace('MM', p(M)).replace('dd', p(D)).replace('HH', p(t.getUTCHours())).replace('mm', p(t.getUTCMinutes())).replace('ss', p(t.getUTCSeconds()));
 }
-function createEnv() {
+function createEnv(opts) {
   const ss = new Spreadsheet(), props = {}, cache = {}, triggers = [], logs = [];
   const state = { now: Date.now(), lockBusy: false, sheetLock: 0 };
   const ctx = {
@@ -81,7 +81,7 @@ function createEnv() {
       constructor(...a) { if (a.length === 0) super(state.now); else super(...a); }
       static now() { return state.now; }
     },
-    SpreadsheetApp: { getActiveSpreadsheet: () => ss, getUi: () => { throw new Error('no ui'); } },
+    SpreadsheetApp: { getActiveSpreadsheet: () => ss, getUi: () => { throw new Error('no ui'); }, flush: () => { state.flushes = (state.flushes || 0) + 1; } },
     LockService: { getScriptLock: () => ({ tryLock: () => !state.lockBusy, releaseLock: () => { state.sheetLock++; } }) },
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); } }) },
     CacheService: { getScriptCache: () => ({
@@ -100,6 +100,7 @@ function createEnv() {
   };
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Code.gs'), 'utf8'), ctx, { filename: 'Code.gs' });
+  if (opts && opts.vars) vm.runInContext(Object.keys(opts.vars).map(k => k + ' = ' + JSON.stringify(opts.vars[k]) + ';').join(''), ctx);   // 지점 코드 등 바꿔 시험
   const call = (payload, t) => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(t === undefined ? payload : Object.assign({ t }, payload)) } }).getContent());
   return { ss, props, ctx, state, call, logs, triggers, cache, doGet: () => JSON.parse(ctx.doGet().getContent()) };
 }

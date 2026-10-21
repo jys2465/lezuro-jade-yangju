@@ -30,9 +30,9 @@ function fresh(seats) {
 
 console.log('\n[서버 시험 v2 — 등급·결제·대기열·코스 이름]');
 
-t('setup: 시트 8개, 관리자 계정, 결제 처음 값(요금·QR·계좌), 다시 실행해도 안전', () => {
+t('setup: 시트 9개, 관리자 계정, 결제 처음 값(요금·QR·계좌), 다시 실행해도 안전', () => {
   const A = fresh(); const env = A.env;
-  assert.deepStrictEqual(env.ss.sheets.map(s => s.name), ['회원', '로그인기록', '코스', '기록', '공개설정', '결제', '설정', '이력']);
+  assert.deepStrictEqual(env.ss.sheets.map(s => s.name), ['회원', '로그인기록', '코스', '기록', '공개설정', '결제', '설정', '이력', '신뢰도']);
   const c = env.call({ a: 'adminCfg' }, A.admin).cfg;
   assert.deepStrictEqual([c.price_month, c.price_year, c.bank_name, c.bank_no, c.bank_holder], [1000, 9000, '카카오뱅크', '3333-05-8835107', '주*수']);
   assert.ok(/^https:\/\/qr\.kakaopay\.com\//.test(c.qr_month));
@@ -275,6 +275,81 @@ t('지점 코드: 설정 시트에 branch=yangju, 같은 지점은 통과, 다�
   const sh = env.ss.getSheetByName('설정'); let found = false;
   for (let k = 2; k <= sh.getLastRow(); k++) if (sh.getRange(k, 1).getValue() === 'branch' && sh.getRange(k, 2).getValue() === 'yangju') found = true;
   assert.ok(found, '설정 시트에 branch 줄이 있어야 함');
+});
+
+t('기간 계산: 체험→월간 30일·연간 365일(오늘부터), 종료 14일 전 연장은 다음 날부터 이어 붙임, 끝난 뒤 결제는 오늘부터', () => {
+  const A = fresh(); const env = A.env; const DAYMS = 86400000;
+  const today = env.call({ a: 'cfg' }).today;
+  const add = (d, n) => { const p = d.split('-'); const t = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + n)); return t.toISOString().slice(0, 10); };
+  const pay = (tok, plan) => { const r = env.call({ a: 'payReq', plan }, tok); assert.ok(r.ok, JSON.stringify(r)); const d = env.call({ a: 'payDecide', id: r.pending.id, ok: 1 }, A.tok('관리자', '8259')); assert.ok(d.ok, JSON.stringify(d)); return d; };
+  const m = A.mk('월체험', 'trial'); pay(m.tok, 'month');
+  let u = A.me(m.tok).user; assert.deepStrictEqual([u.kind, u.start, u.end, u.left], ['month', today, add(today, 29), 29]);
+  const y = A.mk('연체험', 'trial'); pay(y.tok, 'year');
+  u = A.me(y.tok).user; assert.deepStrictEqual([u.kind, u.start, u.end, u.left], ['year', today, add(today, 364), 364]);
+  assert.strictEqual(env.call({ a: 'payReq', plan: 'month' }, m.tok).err, 'nopay', '남은 날이 14일보다 많으면 아직 연장 불가');
+  env.state.now += 16 * DAYMS; const t2 = env.call({ a: 'cfg' }).today; const mt = A.tok('월체험', m.pin);
+  const pv = env.call({ a: 'payInfo' }, mt).preview.month; assert.deepStrictEqual([pv.start, pv.end], [add(today, 30), add(today, 59)], '미리보기 = 종료 다음 날부터 30일');
+  pay(mt, 'month'); u = A.me(mt).user; assert.deepStrictEqual([u.start, u.end, u.left], [today, add(today, 59), 59 - 16]);
+  env.state.now += 60 * DAYMS; const t3 = env.call({ a: 'cfg' }).today; const mt2 = A.tok('월체험', m.pin);
+  assert.strictEqual(A.me(mt2).user.st, 'expired'); pay(mt2, 'month'); u = A.me(mt2).user;
+  assert.deepStrictEqual([u.st, u.start, u.end], ['active', t3, add(t3, 29)], '끝난 뒤 결제 = 오늘부터');
+});
+
+t('두 번 승인 방지: 같은 결제를 두 번 승인해도 기간은 한 번만, 쓰기 요청마다 시트에 바로 기록(flush)', () => {
+  const A = fresh(); const env = A.env; const today = env.call({ a: 'cfg' }).today;
+  const w = A.mk('우리집', 'trial'); const r = env.call({ a: 'payReq', plan: 'month' }, w.tok);
+  const f0 = env.state.flushes || 0;
+  assert.ok(env.call({ a: 'payDecide', id: r.pending.id, ok: 1 }, A.admin).ok);
+  assert.ok((env.state.flushes || 0) > f0, 'flush 호출');
+  // 시트가 늦게 반영되는 상황을 흉내: 결제 줄을 다시 "대기"로 되돌려도 두 번째 승인은 거절
+  const sh = env.ss.getSheetByName('결제'); sh.getRange(2, 7).setValue('pending');
+  const again = env.call({ a: 'payDecide', id: r.pending.id, ok: 1 }, A.admin);
+  assert.strictEqual(again.err, 'nopay');
+  const u = A.me(w.tok).user; assert.strictEqual(u.left, 29); assert.strictEqual(u.start, today);
+});
+
+t('신뢰도: 가져가면 1점, 같은 코스 여러 번은 1점(날짜만 최근), 다른 코스는 따로, 되돌리기는 30분 안만, 목록은 본인·운영진만', () => {
+  const A = fresh(); const env = A.env;
+  const a = A.mk('원작자', 'year'), b = A.mk('가져감', 'month'), c = A.mk('또가져감', 'month');
+  const c1 = A.reg(a.tok, '신뢰코스AB'), c2 = A.reg(a.tok, '신뢰코스CD');
+  A.save(a.tok, c1, [{ i: 0, rec: rec('c', 2) }]); A.save(a.tok, c2, [{ i: 0, rec: rec('f', 1) }]);
+  let r = env.call({ a: 'use', cid: c1, from: '원작자' }, b.tok); assert.ok(r.ok && r.created && r.trust === 1, JSON.stringify(r));
+  env.state.now += 3600000;
+  r = env.call({ a: 'use', cid: c1, from: '원작자' }, b.tok); assert.ok(r.ok && !r.created && r.trust === 1, '같은 코스 다시 → 그대로 1점');
+  assert.ok(env.call({ a: 'unuse', cid: c1, from: '원작자' }, b.tok).removed === 0, '30분 지난 1점은 되돌리기로 안 빠짐');
+  env.state.now += 60000; r = env.call({ a: 'use', cid: c2, from: '원작자' }, b.tok); assert.strictEqual(r.trust, 2, '다른 코스 → 2점');
+  r = env.call({ a: 'use', cid: c1, from: '원작자' }, c.tok); assert.strictEqual(r.trust, 3, '다른 사람 → 3점');
+  assert.strictEqual(env.call({ a: 'unuse', cid: c1, from: '원작자' }, c.tok).removed, 1, '방금 생긴 1점은 되돌리기로 빠짐');
+  assert.strictEqual(A.me(a.tok).trust, 2);
+  const list = env.call({ a: 'trust' }, a.tok); assert.strictEqual(list.trust, 2);
+  assert.deepStrictEqual(list.list.map(x => [x.user, x.course]), [['가져감', '신뢰코스CD'], ['가져감', '신뢰코스AB']]);
+  assert.ok(list.list[1].at > list.list[1].first, '같은 코스를 다시 가져가면 날짜가 최근으로');
+  assert.strictEqual(env.call({ a: 'trust', nick: '원작자' }, b.tok).err, 'perm', '남의 목록은 못 봄');
+  assert.strictEqual(env.call({ a: 'trust', nick: '원작자' }, A.admin).trust, 2, '관리자는 봄');
+  const au = env.call({ a: 'course', id: c1 }, b.tok); assert.strictEqual(au.authors[0].trust, 2); assert.strictEqual(au.pick.trust, 2);
+  assert.strictEqual(env.call({ a: 'members' }, A.admin).members.find(m => m.nick === '원작자').trust, 2);
+  assert.strictEqual(env.call({ a: 'use', cid: c1, from: '가져감' }, a.tok).err, 'bad', '기록 없는 회원 것은 1점 안 됨');
+  assert.strictEqual(env.call({ a: 'use', cid: c1, from: '원작자' }, a.tok).err, 'bad', '내 것은 안 됨');
+  env.call({ a: 'delCourse', id: c2 }, A.admin); assert.strictEqual(A.me(a.tok).trust, 1, '코스를 지우면 그 코스 점수도 정리');
+});
+
+t('신뢰도 순서: 참고할 회원은 신뢰도 높은 순, 기간 끝난 회원은 1점을 줄 수 없음', () => {
+  const A = fresh(); const env = A.env;
+  const a = A.mk('하나', 'year'), b = A.mk('둘이', 'year'), u = A.mk('보는이', 'month');
+  const cid = A.reg(a.tok, '순서코스AB');
+  A.save(a.tok, cid, [{ i: 0, rec: rec('c', 1) }]); A.save(b.tok, cid, [{ i: 0, rec: rec('c', 2) }, { i: 1, rec: rec('c', 2) }]);
+  assert.strictEqual(env.call({ a: 'course', id: cid }, u.tok).authors[0].nick, '둘이', '같은 신뢰도면 기록 많은 순');
+  env.call({ a: 'use', cid, from: '하나' }, u.tok);
+  assert.strictEqual(env.call({ a: 'course', id: cid }, u.tok).authors[0].nick, '하나', '신뢰도 높은 순');
+  env.state.now += 40 * 86400000; const ut = A.tok('보는이', u.pin);
+  assert.strictEqual(env.call({ a: 'use', cid, from: '둘이' }, ut).err, 'expired');
+});
+
+t('새 버전 탭(신뢰도)이 없는 예전 시트: setup 을 안 돌려도 처음 쓸 때 저절로 만들어짐', () => {
+  const A = fresh(); const env = A.env;
+  env.ss.sheets = env.ss.sheets.filter(s => s.name !== '신뢰도');
+  const r = env.call({ a: 'me' }, A.admin); assert.ok(r.ok && r.trust === 0, JSON.stringify(r));
+  assert.ok(env.ss.getSheetByName('신뢰도'), '탭이 생김');
 });
 
 console.log(`\n결과: ${ok} 통과 / ${bad} 실패`); process.exit(bad ? 1 : 0);

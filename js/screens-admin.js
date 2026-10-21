@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var LZ = window.LZ, u = LZ.u, ui = LZ.ui, $ = u.$, $$ = u.$$, esc = u.esc, S = LZ.S, P = LZ.pwa;
-  var VERSION = '2.0.0';
+  var VERSION = '2.1.0';
   LZ.appUrl = function () { return location.origin + location.pathname.replace(/index\.html$/, ''); };
 
   /* ───── 설정 ───── */
@@ -18,8 +18,9 @@
           (pend ? '<div class="ban b" style="margin:8px 0 0">입금 확인 중: ' + esc(pend.planName) + ' ' + u.won(pend.amount) + '</div>' : '') +
           '<button class="btn" id="pay" type="button" style="margin-top:10px">' + (pend ? '결제 상태 보기' : us.kind === 'trial' || us.st === 'expired' ? '이용권 결제하기' : '이용권 연장 · 결제') + '</button></div>';
       }
-      root.innerHTML = '<div class="scr">' + ui.hdr('설정') + '<div class="bd">' + memBlock() +
+      root.innerHTML = '<div class="scr">' + ui.hdr('설정') + '<div class="bd">' + memBlock() + LZ.trustChip() +
         (admin ? '<div class="blk"><h4>관리자</h4><div style="display:grid;gap:8px"><button class="btn g" id="pays" type="button">결제 확인 · 환불</button><button class="btn g" id="acfg" type="button">요금 · QR · 계좌 · 좌석 · 매장 · 로고</button></div></div>' : '') +
+        (LZ.multiBranch && ui.isAdmin() ? '<div class="blk"><h4>지점 (관리자만)</h4><div style="font-size:16px;margin-bottom:8px"><b>' + esc(S.store) + '</b></div><button class="btn g" id="brc" type="button">지점 바꾸기</button></div>' : '') +
         '<div class="blk"><h4>비밀번호</h4><button class="btn g" id="pw" type="button">비밀번호 바꾸기</button></div>' +
         '<div class="blk"><h4>화면 모드</h4><div class="seg" id="thm">' + [['light', '밝게'], ['dark', '어둡게'], ['auto', '자동']].map(function (t) { return '<button type="button" data-t="' + t[0] + '" class="' + (LZ.theme.mode() === t[0] ? 'on' : '') + '">' + t[1] + '</button>'; }).join('') + '</div><p class="hint">자동은 휴대폰 설정(다크 모드)을 따라가요. 맨 위의 해·달 단추로도 바로 바꿀 수 있어요.</p></div>' +
         '<div class="blk"><h4>글씨 크기</h4><div class="seg" id="fs">' + [['0', '보통'], ['1', '크게'], ['2', '아주 크게']].map(function (f) { return '<button type="button" data-f="' + f[0] + '" class="' + (fs === f[0] ? 'on' : '') + '">' + f[1] + '</button>'; }).join('') + '</div></div>' +
@@ -27,9 +28,11 @@
         '<div class="blk"><h4>내 기록 공개</h4><p class="hint" style="margin:-4px 0 8px">켜 두면 같은 코스를 쓰는 회원이 내 기록을 보고 비교할 수 있어요. 기본은 공개예요.' + (us.st === 'expired' ? ' (이용 기간이 끝나서 지금은 다른 회원에게 보이지 않아요.)' : '') + '</p><div id="pubs">' + ui.skeleton(1) + '</div></div>' +
         '<button class="btn g" id="out" type="button">로그아웃</button><p class="hint" style="text-align:center">앱 버전 ' + VERSION + ' · ' + esc(P.device) + '</p></div>' + ui.tabs('settings') + '</div>';
       var pb = $('#pay'); if (pb) pb.onclick = function () { LZ.go('pay', {}); };
+      LZ.bindMemberBanner(root);
       var ps = $('#pays'); if (ps) ps.onclick = function () { LZ.go('payments', {}); };
       var ac = $('#acfg'); if (ac) ac.onclick = function () { LZ.go('adminCfg', {}); };
       $('#pw').onclick = function () { LZ.go('pin', {}); };
+      var brc = $('#brc'); if (brc) brc.onclick = function () { LZ.go('branch', {}); };
       $$('#thm button').forEach(function (b) { b.onclick = function () { LZ.theme.set(b.dataset.t); $$('#thm button').forEach(function (x) { x.classList.toggle('on', x === b); }); }; });
       $$('#fs button').forEach(function (b) { b.onclick = function () { u.store.set('lz.fs', b.dataset.f); LZ.applyFontSize(); $$('#fs button').forEach(function (x) { x.classList.toggle('on', x === b); }); }; });
       var i = $('#inst'); if (i) i.onclick = function () { LZ.go('install', {}); };
@@ -53,7 +56,7 @@
 
   /* ───── 회원 관리 ───── */
   function inviteText(nick, pin) {
-    return '[' + S.store + '] 파크골프 방향 기록장\n아래 주소를 눌러 들어오세요.\n' + LZ.appUrl() + '?u=' + encodeURIComponent(nick) + '\n닉네임: ' + nick + '\n처음 비밀번호: ' + pin + '\n처음 들어오면 나만의 비밀번호 4자리로 바꾸게 돼요.\n(카카오톡에서 열리면 오른쪽 위 ⋯ 메뉴의 "다른 브라우저로 열기"를 눌러 주세요.)';
+    return '[' + S.store + '] 파크골프 방향 기록장\n아래 주소를 눌러 들어오세요.\n' + LZ.appUrl() + LZ.linkQuery(nick) + '\n닉네임: ' + nick + '\n처음 비밀번호: ' + pin + '\n처음 들어오면 나만의 비밀번호 4자리로 바꾸게 돼요.\n(카카오톡에서 열리면 오른쪽 위 ⋯ 메뉴의 "다른 브라우저로 열기"를 눌러 주세요.)';
   }
   var KIND = { trial: '체험회원', month: '월간회원', year: '연간회원', op: '운영자', admin: '관리자' };
   function chipCls(m) { return m.st === 'expired' ? 'r' : m.kind === 'trial' ? 'y' : m.kind === 'year' || m.kind === 'month' ? 'gr' : ''; }
@@ -73,7 +76,7 @@
         var self = m.nick.toLowerCase() === S.user.nick.toLowerCase(), per = u.period(m.start, m.end);
         return '<div class="mem"><div class="top"><div class="av">' + esc(m.nick[0]) + (m.online ? '<i class="on" title="접속 중"></i>' : '') + '</div><div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:500;word-break:break-all">' + esc(m.nick) + (self ? ' (나)' : '') + '</div>' +
           '<span class="chip ' + chipCls(m) + '">' + esc(ui.kindLabel(m)) + '</span>' + (m.active ? '' : ' <span class="chip r">이용 중지</span>') + (m.pendingPay ? ' <span class="chip r">입금 확인 대기</span>' : '') +
-          '<div class="meta">' + (per ? per + '<br>' : '') + (m.online ? '<b style="color:var(--gt)">● 지금 접속 중</b>' : '마지막 접속: ' + u.ago(m.seenAt || m.last)) + ' · 기록한 코스 ' + (m.courses || 0) + '곳' + (m.kind === 'trial' ? ' · 체험 연장 ' + (m.ext || 0) + '/2' : '') + '</div></div>' +
+          '<div class="meta">' + (per ? per + '<br>' : '') + (m.online ? '<b style="color:var(--gt)">● 지금 접속 중</b>' : '마지막 접속: ' + u.ago(m.seenAt || m.last)) + ' · 기록한 코스 ' + (m.courses || 0) + '곳 · 신뢰 ' + (m.trust || 0) + '점' + (m.kind === 'trial' ? ' · 체험 연장 ' + (m.ext || 0) + '/2' : '') + '</div></div>' +
           (self || m.kind === 'admin' || (!admin && (m.kind === 'op')) ? '' : '<button class="sm" type="button" data-mg="' + i + '">관리</button>') + '</div>' + (open === i ? panel(m, i) : '') + '</div>';
       }
       function shown() {
@@ -117,7 +120,7 @@
           ['month', 'year', 'op'].forEach(function (k) { if (m.kind !== k) h += b('kind', k, KIND[k] + '(으)로 바꾸기' + (k === 'month' ? ' (오늘부터 30일)' : k === 'year' ? ' (오늘부터 365일)' : '')); });
           if (m.kind === 'month' || m.kind === 'year') h += b('extend', '30', '기간 30일 늘리기') + b('extend', '365', '기간 365일 늘리기');
         }
-        h += b('pin', '', '비밀번호 다시 만들기');
+        h += b('trust', '', '신뢰도 보기 (' + (m.trust || 0) + '점)') + b('pin', '', '비밀번호 다시 만들기');
         if (admin) {
           h += b('active', m.active ? '0' : '1', m.active ? '이용 중지' : '이용 다시 시작');
           h += del === i ? b('delok', '', '정말 삭제할게요 (기록도 함께 지워져요)', 'dng') + b('delno', '', '취소') : b('del', '', '삭제', 'dng');
@@ -125,6 +128,10 @@
         return h + '</div>';
       }
       async function create() {
+        if (working) return; working = true;
+        try { await create2(); } finally { working = false; }
+      }
+      async function create2() {
         var nick = $('#nn').value.trim(), e = $('#nnE'); e.textContent = ''; $('#nn').classList.remove('bad');
         if (!/^[가-힣A-Za-z0-9]{2,8}$/.test(nick)) { e.textContent = '닉네임은 한글·영문·숫자 2~8자로 적어 주세요. (띄어쓰기 없이)'; $('#nn').classList.add('bad'); return; }
         var k = admin ? kind : 'trial';
@@ -136,9 +143,15 @@
           var rc = $('#inv'); if (rc) rc.scrollIntoView({ block: 'center' });
         } catch (er) { ui.busy(false); $('#nnE').textContent = ui.errText(er); $('#nn').classList.add('bad'); }
       }
+      var working = false;
       async function act(i, a, v) {
+        if (working) return; working = true;
+        try { await act2(i, a, v); } finally { working = false; }
+      }
+      async function act2(i, a, v) {
         var m = list[i];
         if (a === 'del') { del = i; return keep(); } if (a === 'delno') { del = null; return keep(); }
+        if (a === 'trust') { LZ.guard = null; return LZ.go('trust', { nick: m.nick }); }
         var body = { nick: m.nick, op: a };
         if (a === 'kind') { body.kind = v; if (!(await ui.confirm(m.nick + '님을 ' + KIND[v] + '(으)로 바꿀까요?', v === 'op' ? '운영자는 기간 없이 쓸 수 있어요.' : '오늘부터 ' + (v === 'month' ? 30 : 365) + '일 동안 쓸 수 있어요. 결제로 생긴 기간이 있다면 "기간 늘리기"를 쓰세요.', '바꾸기'))) return; }
         else if (a === 'extend') body.days = +v;
@@ -191,14 +204,22 @@
       }
       function find(id) { return d.pending.concat(d.recent).filter(function (x) { return x.id === id; })[0]; }
       async function reload() { d = await LZ.api('payList', {}); if (alive()) draw(); }
+      var working = false;                                                   // 처리 중에는 다른 단추를 눌러도 무시(두 번 처리 방지)
       async function decide(id, ok) {
-        var x = find(id);
+        if (working) return; var x = find(id); working = true;
+        try { await decide2(x, id, ok); } finally { working = false; }
+      }
+      async function decide2(x, id, ok) {
         if (!(await ui.confirm(ok ? '승인할까요?' : '거절할까요?', x.nick + '님 ' + x.planName + ' ' + u.won(x.amount) + '\n보낸 분 표시: ' + x.depositor + (ok ? '\n입금을 확인했을 때만 승인해 주세요.' : '\n입금이 확인되지 않을 때 거절해요.'), ok ? '승인' : '거절', !ok))) return;
         ui.busy(true, '처리하고 있어요…');
         try { var r = await LZ.api('payDecide', { id: id, ok: ok ? 1 : 0 }, { retry: 0 }); ui.busy(false); ui.toast(ok ? x.nick + '님 ' + x.planName + ' 시작: ' + u.period(r.pay.start, r.pay.end) : '거절했어요', 5000); await reload(); }
         catch (e) { ui.busy(false); ui.toast(ui.errText(e), 5000); reload(); }
       }
       async function refund(id) {
+        if (working) return; working = true;
+        try { await refund2(id); } finally { working = false; }
+      }
+      async function refund2(id) {
         var x = find(id);
         ui.busy(true, '환불 금액을 계산하고 있어요…');
         try {

@@ -4,7 +4,7 @@
   var LZ = window.LZ, u = LZ.u, $ = u.$, esc = u.esc;
   var ui = LZ.ui = {};
   LZ.screens = LZ.screens || {};
-  LZ.S = LZ.S || { token: null, user: null, store: '제이드 양주점', logos: { dark: 'assets/logo-dark.png', light: 'assets/logo-light.png' } };
+  LZ.S = LZ.S || { token: null, user: null, store: (LZ.branchCfg && LZ.branchCfg.name) || '제이드 양주점', logos: { dark: 'assets/logo-dark.png', light: 'assets/logo-light.png' } };
 
   var toastT;
   ui.toast = function (msg, ms) {
@@ -59,7 +59,8 @@
     if (m.st === 'expired') return n + ' · 기간 끝남';
     return n + ' · ' + u.dday(m.left);
   };
-  ui.tag = function (usr) { return usr ? esc(usr.nick) + ' · ' + esc(ui.kindLabel(usr)) : ''; };
+  /* 머리글 오른쪽: 첫 줄 닉네임(굵게), 둘째 줄 회원 종류 · D-남은 날 */
+  ui.tag = function (usr) { return usr ? '<b>' + esc(usr.nick) + '</b><span>' + esc(ui.kindLabel(usr)) + '</span>' : ''; };
   /* ───── 화면 모드: 'light' 밝게, 'dark' 어둡게, 'auto' 휴대폰 설정대로(처음 값) ───── */
   var T = LZ.theme = {
     mode: function () { var m = u.store.get('lz.theme'); return m === 'light' || m === 'dark' ? m : 'auto'; },

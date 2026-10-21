@@ -23,9 +23,10 @@ var ADMIN_NICK = '관리자';
 /** 지점 코드(영문 소문자·숫자). 화면의 js/config.js 의 BRANCH 와 같아야 합니다.
  *  나중에 여러 지점을 운영할 때 지점을 구분하는 열쇠가 됩니다. (바꾸려면 '설정' 시트의 branch 값을 고치세요) */
 var BRANCH = 'yangju';
+/** 이 지점의 매장 이름 처음 값(관리자 설정에서 바꿀 수 있음). 새 지점은 BRANCH 와 함께 이 값만 바꾸고 setup 을 실행하세요. */
+var STORE_DEFAULT = '제이드 양주점';
 /** 결제 처음 값 — 관리자 화면에서 바꿀 수 있습니다. */
 var PAY_DEFAULTS = {
-  branch: BRANCH,
   price_month: '1000',
   price_year: '9000',
   qr_month: 'https://qr.kakaopay.com/281006011000000956229137',
@@ -58,10 +59,11 @@ var SH = {
   prefs:    ['nick', 'cid', 'pub'],
   payments: ['id', 'nick', 'plan', 'amount', 'method', 'depositor', 'status', 'created', 'decided', 'by', 'start', 'end', 'refund', 'refundAt'],
   settings: ['key', 'val'],
-  log:      ['ts', 'nick', 'act', 'info']
+  log:      ['ts', 'nick', 'act', 'info'],
+  uses:     ['owner', 'user', 'cid', 'first', 'last']   // 신뢰도: user 가 owner 의 cid 코스 기록을 가져다 씀(코스마다 1번)
 };
 var TITLE = {
-  users: '회원', sessions: '로그인기록', courses: '코스', records: '기록', prefs: '공개설정', payments: '결제', settings: '설정', log: '이력'
+  users: '회원', sessions: '로그인기록', courses: '코스', records: '기록', prefs: '공개설정', payments: '결제', settings: '설정', log: '이력', uses: '신뢰도'
 };
 
 /* ───────────── 입구 ───────────── */
@@ -105,7 +107,11 @@ function run_(h, ctx, q) {
   if (!h.w) return h.fn(q, ctx);
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) throw E_('busy', '지금 다른 분이 저장 중이에요. 잠시 뒤에 다시 해 주세요.');
-  try { return h.fn(q, ctx); } finally { lock.releaseLock(); }
+  try { return h.fn(q, ctx); }
+  finally {
+    try { SpreadsheetApp.flush(); } catch (e) { /* 무시 */ }   // ★ 잠금을 풀기 전에 시트에 바로 기록 — 다음 요청이 옛 내용을 읽지 않게(두 번 승인 방지)
+    lock.releaseLock();
+  }
 }
 
 function authed_(h, q) {
@@ -179,8 +185,14 @@ function okNick_(s) { return /^[가-힣A-Za-z0-9]{2,8}$/.test(s); }
 
 function ss_() { return SpreadsheetApp.getActiveSpreadsheet(); }
 function sheet_(name) {
-  var s = ss_().getSheetByName(TITLE[name]);
-  if (!s) throw E_('setup', '서버 준비가 안 됐어요. 개발자에게 setup 실행을 요청해 주세요.');
+  var ss = ss_(), s = ss.getSheetByName(TITLE[name]);
+  if (s) return s;
+  if (name === 'users' || name === 'settings') throw E_('setup', '서버 준비가 안 됐어요. 개발자에게 setup 실행을 요청해 주세요.');
+  s = ss.insertSheet(TITLE[name]);                                         // 새 버전에서 생긴 탭(예: 신뢰도)은 setup 을 안 돌려도 저절로 만듦
+  var cols = SH[name].length;
+  s.getRange(1, 1, Math.max(s.getMaxRows(), 2), cols).setNumberFormat('@');
+  s.getRange(1, 1, 1, cols).setValues([SH[name]]);
+  if (s.setFrozenRows) s.setFrozenRows(1);
   return s;
 }
 function rows_(name) {
@@ -250,6 +262,7 @@ function cfg_() {
   var all = settings_(), o = {};
   for (var k in PAY_DEFAULTS) o[k] = PAY_DEFAULTS[k];
   for (var k2 in all) if (k2.indexOf('logo_') !== 0 || k2 === 'logo_ver') o[k2] = all[k2];
+  o.branch = all.branch || BRANCH;
   cput_('cfg', o, 300);
   return o;
 }
@@ -401,7 +414,7 @@ function seatStat_() {
 /* ───────────── 공개·로그인 ───────────── */
 
 function aCfg(q) {
-  var c = cfg_(), ver = num_(c.logo_ver), out = { ok: true, store: c.store || '제이드 양주점', branch: c.branch || BRANCH, logoVer: ver, today: today_() };
+  var c = cfg_(), ver = num_(c.logo_ver), out = { ok: true, store: c.store || STORE_DEFAULT, branch: c.branch || BRANCH, logoVer: ver, today: today_() };
   if (ver && Number(q.lv) !== ver) { var s = settings_(); out.logos = { dark: joinLogo_(s, 'dark'), light: joinLogo_(s, 'light') }; }
   return out;
 }
@@ -445,7 +458,7 @@ function myPending_(nick) {
 }
 function aMe(q, ctx) {
   var c = cfg_(), p = myPending_(ctx.u.nick);
-  return { ok: true, user: userInfo_(ctx.u), store: c.store || '제이드 양주점', today: today_(), pay: canPay_(ctx.u), pending: p ? payView_(p) : null };
+  return { ok: true, user: userInfo_(ctx.u), store: c.store || STORE_DEFAULT, today: today_(), pay: canPay_(ctx.u), pending: p ? payView_(p) : null, trust: trustMap_()[nickKey_(ctx.u.nick)] || 0 };
 }
 function aPing() { return { ok: true }; }
 function aLogout(q, ctx) {
@@ -638,12 +651,14 @@ function aCourse(q, ctx) {
     if (String(rr[i][0]) !== c.id || nk === me || num_(rr[i][2]) <= 0 || !vis[nk] || priv[nk + '|' + c.id]) continue;
     list.push({ nick: str_(rr[i][1]), filled: num_(rr[i][2]), upd: num_(rr[i][4]), json: str_(rr[i][3]) });
   }
-  list.sort(function (a, b) { return b.upd - a.upd; });
-  out.authors = list.map(function (a) { return { nick: a.nick, filled: a.filled }; });
+  var tm = trustMap_();
+  list.forEach(function (a) { a.trust = tm[nickKey_(a.nick)] || 0; });
+  list.sort(function (a, b) { return (b.trust - a.trust) || (b.filled - a.filled) || (b.upd - a.upd); });   // 신뢰도 높은 순
+  out.authors = list.map(function (a) { return { nick: a.nick, filled: a.filled, trust: a.trust }; });
   if (list.length) {
     var want = nickKey_(q.who || ''), pick = list[0];
     for (var j = 0; j < list.length; j++) if (nickKey_(list[j].nick) === want) pick = list[j];
-    out.pick = { nick: pick.nick, recs: parseRecs_(pick.json) };
+    out.pick = { nick: pick.nick, trust: pick.trust, recs: parseRecs_(pick.json) };
   }
   return out;
 }
@@ -718,6 +733,7 @@ function aDelCourse(q, ctx) {
   rewrite_('courses', function (r) { return String(r[0]) !== c.id; });
   rewrite_('records', function (r) { return String(r[0]) !== c.id; });
   rewrite_('prefs', function (r) { return String(r[1]) !== c.id; });
+  rewrite_('uses', function (r) { return String(r[2]) !== c.id; });
   dropCourseCache_();
   log_(ctx.u.nick, '코스 삭제', c.name);
   return { ok: true };
@@ -750,6 +766,57 @@ function aPrefs(q, ctx) {
   var k = nickKey_(ctx.u.nick), r = rows_('prefs'), off = [];
   for (var i = 0; i < r.length; i++) if (nickKey_(r[i][0]) === k && num_(r[i][2]) === 0) off.push(String(r[i][1]));
   return { ok: true, off: off };
+}
+
+/* ───────────── 신뢰도: 다른 회원이 내 기록을 가져다 쓴 횟수 ─────────────
+ * 같은 사람이 같은 코스에서 몇 번을 가져가도 1점(날짜만 가장 최근으로 바뀜). 코스가 다르면 따로 1점. */
+
+function trustMap_() {
+  var m = {}, r = rows_('uses');
+  for (var i = 0; i < r.length; i++) { var k = nickKey_(r[i][0]); m[k] = (m[k] || 0) + 1; }
+  return m;
+}
+function findUse_(owner, user, cid) {
+  var r = rows_('uses'), o = nickKey_(owner), u = nickKey_(user);
+  for (var i = 0; i < r.length; i++) if (nickKey_(r[i][0]) === o && nickKey_(r[i][1]) === u && String(r[i][2]) === String(cid)) return { row: i + 2, first: num_(r[i][3]), last: num_(r[i][4]) };
+  return null;
+}
+/** 가져오기를 했을 때 화면이 알려 줌: { cid, from } */
+function aUse(q, ctx) {
+  var c = findCourse_(q.cid), me = ctx.u;
+  if (!c || c.stage !== 'done') throw E_('nocourse', '찾는 코스가 없어요.');
+  var src = findUser_(q.from);
+  if (!src || nickKey_(src.nick) === nickKey_(me.nick)) throw E_('bad', '가져온 회원을 찾을 수 없어요.');
+  var vis = visibleNicks_(users_()), priv = privateMap_(), k = nickKey_(src.nick);
+  if (!vis[k] || priv[k + '|' + c.id] || !(getRecs_(c.id, src.nick).recs.some(function (r) { return r.r; }))) throw E_('bad', '이 코스에 공개된 기록이 없는 회원이에요.');
+  var now = Date.now(), had = findUse_(src.nick, me.nick, c.id);
+  if (had) sheet_('uses').getRange(had.row, 5).setValue(now);
+  else append_('uses', [src.nick, me.nick, c.id, now, now]);
+  return { ok: true, created: !had, trust: trustMap_()[k] || 0 };
+}
+/** 가져온 직후 되돌리기: 방금(30분 안) 새로 생긴 1점만 뺌 */
+function aUnuse(q, ctx) {
+  var had = findUse_(q.from, ctx.u.nick, q.cid);
+  if (had && Date.now() - had.first < 30 * 60000) {
+    rewrite_('uses', function (r) { return !(nickKey_(r[0]) === nickKey_(q.from) && nickKey_(r[1]) === nickKey_(ctx.u.nick) && String(r[2]) === String(q.cid)); });
+    return { ok: true, removed: 1 };
+  }
+  return { ok: true, removed: 0 };
+}
+/** 신뢰도 목록: 언제(가장 최근), 누가, 어느 코스. 회원은 자기 것만, 운영자·관리자는 누구 것이나 */
+function aTrust(q, ctx) {
+  var nick = ctx.u.nick;
+  if (q.nick && nickKey_(q.nick) !== nickKey_(nick)) {
+    if (!isStaff_(ctx.u)) throw E_('perm', '내 신뢰도만 볼 수 있어요.');
+    var who = findUser_(q.nick); if (!who) throw E_('nouser', '찾는 회원이 없어요.');
+    nick = who.nick;
+  }
+  var names = {}; courses_().forEach(function (c) { names[c.id] = c.name; });
+  var k = nickKey_(nick), list = rows_('uses').filter(function (r) { return nickKey_(r[0]) === k; }).map(function (r) {
+    return { at: num_(r[4]), first: num_(r[3]), user: str_(r[1]), cid: str_(r[2]), course: names[str_(r[2])] || '(지워진 코스)' };
+  });
+  list.sort(function (a, b) { return b.at - a.at; });
+  return { ok: true, nick: nick, trust: list.length, list: list };
 }
 
 /* ───────────── 결제 (닉네임 송금 + 관리자 승인) ───────────── */
@@ -806,7 +873,8 @@ function aPayList(q) {
 }
 function aPayDecide(q, ctx) {
   var p = findPay_(q.id);
-  if (!p || p.status !== 'pending') throw E_('nopay', '확인 기다리는 결제가 아니에요. (이미 처리됐을 수 있어요)');
+  if (!p || p.status !== 'pending' || cache_().get('pd:' + p.id)) throw E_('nopay', '이미 처리된 결제예요. (두 번 누르셨을 수 있어요) 목록을 새로 불러올게요.');
+  cache_().put('pd:' + p.id, '1', 21600);                                  // 같은 결제를 두 번 처리하지 않게 표시(시트보다 먼저 보임)
   var u = findUser_(p.nick);
   if (!q.ok || !u) {
     p.status = 'rejected'; p.decided = Date.now(); p.by = ctx.u.nick; setRow_('payments', p.row, payRow_(p));
@@ -834,11 +902,12 @@ function refundCalc_(p) {
 }
 function aPayRefund(q, ctx) {
   var p = findPay_(q.id);
-  if (!p || p.status !== 'ok') throw E_('nopay', '환불할 수 있는 결제가 아니에요.');
+  if (!p || p.status !== 'ok' || (q.confirm && cache_().get('rf:' + p.id))) throw E_('nopay', '환불할 수 있는 결제가 아니에요. (이미 처리됐을 수 있어요)');
   var later = pays_().filter(function (x) { return x.status === 'ok' && nickKey_(x.nick) === nickKey_(p.nick) && x.decided > p.decided; });
   if (later.length) throw E_('nopay', '이 회원의 가장 최근 결제부터 환불할 수 있어요.');
   var calc = refundCalc_(p);
   if (!q.confirm) return { ok: true, calc: calc };
+  cache_().put('rf:' + p.id, '1', 21600);
   var u = findUser_(p.nick), t = today_();
   if (u) { u.end = t < p.start ? addDays_(p.start, -1) : addDays_(t, -1); saveUser_(u); }
   p.status = 'refunded'; p.refund = calc.amount; p.refundAt = Date.now(); setRow_('payments', p.row, payRow_(p));
@@ -856,12 +925,12 @@ function memberView_(u, extra) {
 function aMembers(q, ctx) {
   var now = Date.now(), users = users_(), keys = users.map(function (u) { return 'seen:' + nickKey_(u.nick); });
   var seen = cache_().getAll ? cache_().getAll(keys) : {};
-  var seats = cget_('seats') || {}, cnt = {}, rr = rows_('records'), pend = {};
+  var seats = cget_('seats') || {}, cnt = {}, rr = rows_('records'), pend = {}, tm = trustMap_();
   for (var i = 0; i < rr.length; i++) if (num_(rr[i][2]) > 0) { var k = nickKey_(rr[i][1]); cnt[k] = (cnt[k] || 0) + 1; }
   pays_().forEach(function (p) { if (p.status === 'pending') pend[nickKey_(p.nick)] = 1; });
   var list = users.map(function (u) {
     var k = nickKey_(u.nick), s = Math.max(num_(seen['seen:' + k]), u.seen || 0, seats[k] || 0);
-    return memberView_(u, { seenAt: s, online: now - s < LIM.idleMs ? 1 : 0, courses: cnt[k] || 0, pendingPay: pend[k] || 0 });
+    return memberView_(u, { seenAt: s, online: now - s < LIM.idleMs ? 1 : 0, courses: cnt[k] || 0, pendingPay: pend[k] || 0, trust: tm[k] || 0 });
   });
   var order = { admin: 0, op: 1, year: 2, month: 3, trial: 4 };
   list.sort(function (a, b) { return (b.online - a.online) || ((order[a.kind] || 9) - (order[b.kind] || 9)) || (a.nick < b.nick ? -1 : 1); });
@@ -915,6 +984,7 @@ function aMUpdate(q, ctx) {
     dropSessions_(u.nick);
     rewrite_('records', function (r) { return nickKey_(r[1]) !== k; });
     rewrite_('prefs', function (r) { return nickKey_(r[0]) !== k; });
+    rewrite_('uses', function (r) { return nickKey_(r[0]) !== k && nickKey_(r[1]) !== k; });
     rewrite_('users', function (r) { return nickKey_(r[0]) !== k; });
     log_(me.nick, '계정 삭제', u.nick);
     return out;
@@ -929,7 +999,7 @@ function aMUpdate(q, ctx) {
 
 function aAdminCfg() {
   var c = cfg_();
-  return { ok: true, cfg: { branch: c.branch || BRANCH, store: c.store || '제이드 양주점', price_month: num_(c.price_month), price_year: num_(c.price_year), qr_month: c.qr_month || '', qr_year: c.qr_year || '',
+  return { ok: true, cfg: { branch: c.branch || BRANCH, store: c.store || STORE_DEFAULT, price_month: num_(c.price_month), price_year: num_(c.price_year), qr_month: c.qr_month || '', qr_year: c.qr_year || '',
     bank_name: c.bank_name || '', bank_no: c.bank_no || '', bank_holder: c.bank_holder || '', seats: num_(c.seats) }, seats: seatStat_() };
 }
 function aSetCfg(q, ctx) {
@@ -994,6 +1064,9 @@ var H = {
   save:       { w: 1, write: 1, fn: aSave },
   pub:        { w: 1, fn: aPub },
   prefs:      { fn: aPrefs },
+  use:        { w: 1, write: 1, fn: aUse },
+  unuse:      { w: 1, fn: aUnuse },
+  trust:      { fn: aTrust },
   payInfo:    { fn: aPayInfo },
   payReq:     { w: 1, fn: aPayReq },
   payCancel:  { w: 1, fn: aPayCancel },
@@ -1031,6 +1104,7 @@ function setup() {
   if (!props.getProperty('PEPPER')) props.setProperty('PEPPER', rand_(40));
   var msg = migrate_();
   if (settings_().branch === undefined) setSetting_('branch', BRANCH);     // 지점 코드를 '설정' 시트에 남겨 둠
+  if (settings_().store === undefined) setSetting_('store', STORE_DEFAULT);
   var adm = findUser_(ADMIN_NICK);
   if (!adm) {
     var pin = genPin_(), salt = rand_(16);

@@ -8,10 +8,10 @@
   LZ.ApiError = ApiError;
 
   function post(a, body, o) {
-    var url = (window.LZ_CONFIG || {}).API;
+    var url = LZ.branchCfg && LZ.branchCfg.API;
     if (!url || /^YOUR_/.test(url)) return Promise.reject(new ApiError('config', '서버 주소가 아직 설정되지 않았어요.\n개발자에게 js/config.js 를 확인해 달라고 해 주세요.'));
     var payload = {}; for (var k in (body || {})) payload[k] = body[k];
-    payload.a = a; if (window.LZ_CONFIG && window.LZ_CONFIG.BRANCH) payload.b = LZ.branch;   // 지점 코드: 서버가 다른 지점 주소면 거절
+    payload.a = a; if (LZ.branchOn) payload.b = LZ.branch;   // 지점 코드: 서버가 다른 지점 주소면 거절
     if (LZ.S && LZ.S.token && !o.noAuth) payload.t = LZ.S.token;
     var ctl = window.AbortController ? new AbortController() : null, timer = ctl ? setTimeout(function () { ctl.abort(); }, o.timeout || 40000) : null;
     /* 사전요청(OPTIONS)이 생기지 않도록 text/plain 으로 보냄 */

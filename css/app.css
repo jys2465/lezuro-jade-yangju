@@ -32,7 +32,7 @@ h1,h2,h3,h4{font-weight:500;margin:0}
 .spin{width:2.125rem;height:2.125rem;border:0.25rem solid var(--line);border-top-color:var(--ink);border-radius:50%;animation:sp .8s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
 .hd{background:var(--sf);border-bottom:1px solid var(--line);min-height:3.875rem;padding:calc(var(--sat)) 0.875rem 0;display:flex;align-items:center;justify-content:space-between;color:var(--ink);position:sticky;top:0;z-index:20}
 .hd img{height:2.75rem;padding:0.25rem 0;width:auto;display:block}
-.who{font-size:0.8125rem;background:var(--sf2);color:var(--ink);padding:0.375rem 0.75rem;border-radius:6.1875rem;max-width:12.5rem;text-align:center;line-height:1.25}
+.who{display:flex;flex-direction:column;align-items:flex-end;text-align:right;line-height:1.25;min-width:0;max-width:13.75rem}.who b{font-size:1rem;font-weight:500;color:var(--ink);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.who span{font-size:0.7812rem;color:var(--mut);white-space:nowrap;margin-top:2px}
 .hd2{background:var(--sf);border-bottom:1px solid var(--line);min-height:3.5rem;padding:var(--sat) 0.5rem 0;display:flex;align-items:center;gap:0.25rem;color:var(--ink);font-size:1.0625rem;font-weight:500;position:sticky;top:0;z-index:20}
 .hd2 .bk{background:none;border:0;color:var(--ink);font-size:1.625rem;min-width:3rem;height:3rem;display:flex;align-items:center;justify-content:center;border-radius:0.75rem}
 .hd2 .ttl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

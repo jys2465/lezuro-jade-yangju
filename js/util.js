@@ -17,19 +17,37 @@
   u.key = function (s) { return u.stripSpaces(s).toLowerCase(); };
   u.debounce = function (fn, ms) { var t; var f = function () { var a = arguments, c = this; clearTimeout(t); t = setTimeout(function () { fn.apply(c, a); }, ms); }; f.cancel = function () { clearTimeout(t); }; return f; };
 
-  /* 지점 코드: 나중에 여러 지점을 한 주소에서 운영할 때 지점을 구분 */
-  LZ.branch = String((window.LZ_CONFIG && window.LZ_CONFIG.BRANCH) || 'main').toLowerCase().replace(/[^a-z0-9]/g, '') || 'main';
+  /* ───── 지점: 화면(이 주소)은 하나, 서버·시트는 지점마다 따로 ─────
+   * 주소 끝의 ?s=지점코드 로 지점을 고르고, 폰이 마지막 지점을 기억합니다. 없으면 기본 지점(DEFAULT). */
+  var C = window.LZ_CONFIG || {}, B = {}, clean = function (x) { return String(x || '').toLowerCase().replace(/[^a-z0-9]/g, ''); };
+  if (C.BRANCHES) for (var bk in C.BRANCHES) { if (clean(bk)) B[clean(bk)] = { code: clean(bk), name: C.BRANCHES[bk].name || '', API: C.BRANCHES[bk].API || '' }; }
+  else B[clean(C.BRANCH) || 'main'] = { code: clean(C.BRANCH) || 'main', name: '', API: C.API || '' };     // 예전 설정 모양(API·BRANCH 한 개)
+  LZ.branches = B; LZ.branchList = Object.keys(B); LZ.multiBranch = LZ.branchList.length > 1;
+  LZ.branchOn = !!(C.BRANCHES || C.BRANCH);                                          // 서버에 지점 코드를 함께 보낼지
+  var DEF = B[clean(C.DEFAULT)] ? clean(C.DEFAULT) : LZ.branchList[0];
+  LZ.ready = function (b) { return !!(B[b] && B[b].API && !/^YOUR_/.test(B[b].API)); };
+  (function () {
+    var q = clean(new URLSearchParams(location.search).get('s')), saved = null;
+    try { saved = clean(localStorage.getItem('lz.branch')); } catch (e) { /* 무시 */ }
+    LZ.branch = B[q] ? q : B[saved] ? saved : DEF;
+    try { localStorage.setItem('lz.branch', LZ.branch); } catch (e) { /* 무시 */ }
+  })();
+  LZ.branchCfg = B[LZ.branch];
+  LZ.switchBranch = function (code) {
+    try { localStorage.setItem('lz.branch', code); } catch (e) { /* 무시 */ }
+    location.href = location.pathname + '?s=' + encodeURIComponent(code);
+  };
   /* 기기 저장소(실패해도 앱이 멈추지 않게).
    * 로그인·기록·임시 저장 같은 값은 지점마다 따로 보관하고("lz@지점코드."), 화면 모드·글씨 크기처럼 폰 전체 설정은 함께 씀 */
-  var SHARED = /^lz\.(theme|fs|hintOff|hintAt|installed|inappOk)$/;
-  function nk(k) { return /^lz\./.test(k) && !SHARED.test(k) ? 'lz@' + LZ.branch + '.' + k.slice(3) : k; }
-  try {                                                                          // 예전 버전(지점 코드 없음)에 남은 값을 이 지점으로 옮김
-    if (!localStorage.getItem('lz@' + LZ.branch + '.moved')) {
+  var SHARED = /^lz\.(theme|fs|hintOff|hintAt|installed|inappOk|branch)$/;
+  function nk(k, b) { return /^lz\./.test(k) && !SHARED.test(k) ? 'lz@' + (b || LZ.branch) + '.' + k.slice(3) : k; }
+  try {                                                                          // 예전 버전(지점 코드 없음)에 남은 값은 기본 지점 것으로 옮김
+    if (!localStorage.getItem('lz@' + DEF + '.moved')) {
       for (var i = localStorage.length - 1; i >= 0; i--) {
         var k0 = localStorage.key(i);
-        if (k0 && /^lz\./.test(k0) && !SHARED.test(k0) && localStorage.getItem(nk(k0)) === null) localStorage.setItem(nk(k0), localStorage.getItem(k0));
+        if (k0 && /^lz\./.test(k0) && !SHARED.test(k0) && localStorage.getItem(nk(k0, DEF)) === null) localStorage.setItem(nk(k0, DEF), localStorage.getItem(k0));
       }
-      localStorage.setItem('lz@' + LZ.branch + '.moved', '1');
+      localStorage.setItem('lz@' + DEF + '.moved', '1');
     }
   } catch (e) { /* 무시 */ }
   u.store = {

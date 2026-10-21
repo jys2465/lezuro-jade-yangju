@@ -28,7 +28,7 @@
         });
       }
       function draw() {
-        root.innerHTML = '<div class="scr">' + ui.hdr('코스') + '<div class="bd">' + LZ.memberBanner() +
+        root.innerHTML = '<div class="scr">' + ui.hdr('코스') + '<div class="bd">' + LZ.memberBanner() + LZ.trustChip() +
           '<input class="inp" id="q" type="search" placeholder="코스 이름 검색 (띄어쓰기 없이)" aria-label="코스 검색" autocomplete="off" value="' + esc(q) + '">' +
           '<div class="row2" style="margin:10px 0 8px"><span class="hint" id="cnt" style="margin:0"></span><button class="sm" id="rf" type="button">새로고침</button></div><div id="clist"></div></div>' +
           '<button class="fab ' + (canReg ? '' : 'off') + '" id="fab" type="button">코스 등록' + (canReg ? '' : ' (월간·연간)') + '</button>' + ui.tabs('courses') + '</div>';

@@ -36,8 +36,19 @@
       if (sameRec(cur.mine[i], o[i])) continue;
       before[i] = u.cloneRec(cur.mine[i]); cur.mine[i] = u.cloneRec(o[i]); LZ.rec.queue(c.id, i, cur.mine[i]); changed.push(i);
     }
-    return { n: changed.length, undo: function () { changed.forEach(function (i) { cur.mine[i] = before[i]; LZ.rec.queue(c.id, i, cur.mine[i]); }); } };
+    /* 신뢰도: 가져다 쓴 것을 서버에 알림(같은 코스는 몇 번이든 1점). 되돌리면 방금 생긴 1점은 뺌 */
+    var from = cur.pick.nick, used = changed.length ? LZ.api('use', { cid: c.id, from: from }, { retry: 1 }).then(function (r) { setTrust(cur, from, r.trust); return r; }, function () { return null; }) : null;
+    return { n: changed.length, done: used, undo: function () {
+      changed.forEach(function (i) { cur.mine[i] = before[i]; LZ.rec.queue(c.id, i, cur.mine[i]); });
+      if (used) used.then(function (r) { if (r && r.created) LZ.api('unuse', { cid: c.id, from: from }, { retry: 1 }).then(function () { setTrust(cur, from, Math.max(0, (r.trust || 1) - 1)); }, function () {}); });
+    } };
   }
+  function setTrust(cur, nick, t) {
+    if (typeof t !== 'number') return;
+    if (cur.pick && cur.pick.nick === nick) cur.pick.trust = t;
+    (cur.authors || []).forEach(function (a) { if (a.nick === nick) a.trust = t; });
+  }
+  function authorLabel(a) { return esc(a.nick) + '님 · <b>신뢰도 ' + (a.trust || 0) + '점</b> · ' + a.filled + '홀'; }
   function countFor(cur) {
     var o = cur.pick.recs, e = 0, a = 0;
     for (var i = 0; i < maxHole(cur.course); i++) { if (!o[i] || !o[i].r || sameRec(cur.mine[i], o[i])) continue; a++; if (!cur.mine[i].r) e++; }
@@ -70,7 +81,7 @@
           '<div class="hint" style="margin:0 6px 8px">18홀 · 파 ' + par() + ' · 총 ' + u.fmt(total()) + 'm · 처음 등록한 분: ' + esc(c.reg) + '님</div>' +
           (c.canEdit ? '<div style="margin:0 4px 8px"><button class="sm" id="info" type="button">파·거리 고치기</button></div>' : '') +
           (ex ? '<div class="ban r" style="margin:8px 4px">이용 기간이 끝나서 다른 회원 기록은 볼 수 없고, 내 기록도 읽기만 돼요. <button class="sm" id="payb" type="button" style="margin-top:6px">이용권 결제하기</button></div>'
-            : pk ? '<div class="blk" style="margin:0 4px 8px"><div class="row2" style="margin:0 0 8px"><span style="font-size:14px;color:var(--mut)">참고할 회원</span><button class="sm" id="who" type="button"><b>' + esc(pk.nick) + '님</b> ▾</button></div><div id="wl" style="display:none;margin:0 0 8px"></div>' +
+            : pk ? '<div class="blk" style="margin:0 4px 8px"><div class="row2" style="margin:0 0 8px"><span style="font-size:14px;color:var(--mut)">참고할 회원</span><button class="sm" id="who" type="button"><b>' + esc(pk.nick) + '님</b>&nbsp;· 신뢰도 ' + (pk.trust || 0) + '점 ▾</button></div><div id="wl" style="display:none;margin:0 0 8px"></div>' +
               '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><button class="sm" id="imp" type="button" style="justify-content:center">' + esc(pk.nick) + '님 기록 가져오기</button><button class="sm" id="cmp" type="button" style="justify-content:center">비교 분석</button></div>' +
               '<div id="undo"></div></div>'
               : '<div class="ban" style="margin:8px 4px">이 코스에는 공개된 다른 회원 기록이 아직 없어요.</div>') +
@@ -88,6 +99,7 @@
         var im = $('#imp'); if (im) im.onclick = async function () {
           var r = await askImport(cur); if (!r) return;
           undoFn = r.undo; table(); showUndo(r.n);
+          if (r.done) r.done.then(function () { if (alive()) { draw(); showUndo(r.n); } });   // 올라간 신뢰도 점수 바로 보이기
           ui.toastUndo(cur.pick.nick + '님 기록 ' + r.n + '홀을 가져왔어요.', '되돌리기', doUndo);
         };
         var cm = $('#cmp'); if (cm) cm.onclick = function () { LZ.go('compare', { id: c.id }); };
@@ -103,7 +115,7 @@
         var from = half * 9, h = '', o = cur.pick && !ui.expired() && !onlyMine ? cur.pick.recs : null;
         for (var i = from; i < from + 9; i++) {
           h += '<div class="hole"><div class="hh"><b>' + u.LBL(i) + '</b><span class="chip y" style="padding:1px 8px">파 ' + c.holes[i][0] + '</span><span>' + u.fm(c.holes[i][1]) + 'm</span></div>' +
-            (o ? '<div class="rw"><div class="nm">' + esc(cur.pick.nick) + '님</div><div class="tx">' + rowSent(o[i]) + '</div></div>' : '') +
+            (o ? '<div class="rw"><div class="nm">' + esc(cur.pick.nick) + '님<small style="display:block;color:var(--pri);font-size:11px">신뢰도 ' + (cur.pick.trust || 0) + '점</small></div><div class="tx">' + rowSent(o[i]) + '</div></div>' : '') +
             '<div class="rw me" role="button" tabindex="0" data-i="' + i + '"><div class="nm">내 기록</div><div class="tx">' + rowSent(cur.mine[i]) + '</div></div></div>';
         }
         var ht = $('#ht'); ht.innerHTML = h; ht.style.width = $('#zw').clientWidth + 'px'; ht.style.zoom = zoom; $('#zl').textContent = '표 크기 ' + Math.round(zoom * 100) + '%';
@@ -128,8 +140,8 @@
       function pickWho() {
         var l = $('#wl'); if (l.style.display === 'block') { l.style.display = 'none'; return; }
         l.style.display = 'block';
-        l.innerHTML = '<div class="hint" style="margin:0 0 6px">이 코스에 기록을 공개한 회원만 나와요</div><div style="display:flex;gap:6px;flex-wrap:wrap">' +
-          cur.authors.map(function (a) { return '<button class="sm ' + (a.nick === cur.pick.nick ? 'on' : '') + '" type="button" data-a="' + esc(a.nick) + '">' + esc(a.nick) + '님 (' + a.filled + '홀)</button>'; }).join('') + '</div>';
+        l.innerHTML = '<div class="hint" style="margin:0 0 6px">이 코스에 기록을 공개한 회원만, 신뢰도 높은 순으로 나와요. 신뢰도는 다른 회원이 그 기록을 가져다 쓴 수예요.</div><div style="display:grid;gap:6px">' +
+          cur.authors.map(function (a) { return '<button class="sm ' + (a.nick === cur.pick.nick ? 'on' : '') + '" type="button" data-a="' + esc(a.nick) + '">' + authorLabel(a) + '</button>'; }).join('') + '</div>';
         $$('#wl [data-a]').forEach(function (b) {
           b.onclick = async function () { var n = await switchWho(cur, b.dataset.a); if (!n || !alive()) return; cur = n; undoFn = null; draw(); };
         });
@@ -218,7 +230,7 @@
         }
         root.innerHTML = '<div class="scr">' + ui.hdr2('비교 분석 · ' + c.name) + '<div class="bd nt">' +
           '<div class="ban g" id="wk" style="display:none"></div>' +
-          '<div class="row2" style="margin:0 0 6px"><span style="font-size:15px">나 ↔ <b>' + esc(nk) + '님</b></span><button class="sm" id="who" type="button">다른 회원 ▾</button></div><div id="wl" style="display:none;margin-bottom:8px"></div>' +
+          '<div class="row2" style="margin:0 0 6px"><span style="font-size:15px">나 ↔ <b>' + esc(nk) + '님</b> <span class="chip r">신뢰도 ' + (cur.pick.trust || 0) + '점</span></span><button class="sm" id="who" type="button">다른 회원 ▾</button></div><div id="wl" style="display:none;margin-bottom:8px"></div>' +
           '<div class="sumg"><div><b>' + cnt.same + '</b>같은 홀</div><div><b>' + cnt.diff + '</b>다른 홀</div><div><b>' + cnt.one + '</b>한쪽만 기록</div></div>' +
           '<p class="hint" style="margin:0 0 8px">같은 기준일 때만 칸 수를 비교해요. 좌측은 −, 우측은 +로 계산해요. 타격감 1 = 5M.</p>' +
           '<label class="chk"><input type="checkbox" id="od" ' + (onlyDiff ? 'checked' : '') + '>다른 홀만 보기</label>' +
@@ -237,7 +249,7 @@
         $('#who').onclick = function () {
           var l = $('#wl'); if (l.style.display === 'block') { l.style.display = 'none'; return; }
           l.style.display = 'block';
-          l.innerHTML = '<div style="display:flex;gap:6px;flex-wrap:wrap">' + cur.authors.map(function (a) { return '<button class="sm ' + (a.nick === nk ? 'on' : '') + '" type="button" data-a="' + esc(a.nick) + '">' + esc(a.nick) + '님 (' + a.filled + '홀)</button>'; }).join('') + '</div>';
+          l.innerHTML = '<div style="display:grid;gap:6px">' + cur.authors.map(function (a) { return '<button class="sm ' + (a.nick === nk ? 'on' : '') + '" type="button" data-a="' + esc(a.nick) + '">' + authorLabel(a) + '</button>'; }).join('') + '</div>';
           $$('#wl [data-a]').forEach(function (b) { b.onclick = async function () { var n = await switchWho(cur, b.dataset.a); if (!n || !alive()) return; cur = n; draw(); }; });
         };
       }

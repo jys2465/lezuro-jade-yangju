@@ -32,7 +32,7 @@ h1,h2,h3,h4{font-weight:500;margin:0}
 .spin{width:34px;height:34px;border:4px solid var(--line);border-top-color:var(--ink);border-radius:50%;animation:sp .8s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
 .hd{background:var(--sf);border-bottom:1px solid var(--line);min-height:62px;padding:calc(var(--sat)) 14px 0;display:flex;align-items:center;justify-content:space-between;color:var(--ink);position:sticky;top:0;z-index:20}
 .hd img{height:44px;padding:4px 0;width:auto;display:block}
-.who{font-size:13px;background:var(--sf2);color:var(--ink);padding:6px 12px;border-radius:99px;max-width:200px;text-align:center;line-height:1.25}
+.who{display:flex;flex-direction:column;align-items:flex-end;text-align:right;line-height:1.25;min-width:0;max-width:220px}.who b{font-size:16px;font-weight:500;color:var(--ink);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.who span{font-size:12.5px;color:var(--mut);white-space:nowrap;margin-top:2px}
 .hd2{background:var(--sf);border-bottom:1px solid var(--line);min-height:56px;padding:var(--sat) 8px 0;display:flex;align-items:center;gap:4px;color:var(--ink);font-size:17px;font-weight:500;position:sticky;top:0;z-index:20}
 .hd2 .bk{background:none;border:0;color:var(--ink);font-size:26px;min-width:48px;height:48px;display:flex;align-items:center;justify-content:center;border-radius:12px}
 .hd2 .ttl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

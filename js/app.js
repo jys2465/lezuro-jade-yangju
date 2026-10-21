@@ -78,12 +78,35 @@
     LZ.stack.pop(); await render();
   });
 
+  /* 개인 링크 뒤에 붙는 부분: 여러 지점이면 ?s=지점&u=닉네임 */
+  LZ.linkQuery = function (nick) { return '?' + (LZ.multiBranch ? 's=' + encodeURIComponent(LZ.branch) + '&' : '') + 'u=' + encodeURIComponent(nick); };
+  /* ───── 지점 바꾸기 (관리자만: 지점마다 관리자 계정이 따로라서 한 폰에서 오갈 때) ─────
+   * 회원·운영자는 지점을 고를 수 없어요. 운영자가 보낸 초대 링크(?s=지점)로 들어온 지점만 씁니다. */
+  LZ.screens.branch = {
+    show: function (p, root) {
+      if (!ui.isAdmin()) { root.innerHTML = '<div class="bd nt"><div class="ban r">지점 바꾸기는 관리자만 할 수 있어요.</div></div>'; return; }
+      root.innerHTML = '<div class="scr">' + (LZ.stack.length > 1 ? ui.hdr2('지점 바꾸기') : '<div class="hero">' + ui.themeBtn() + ui.logo('light') + '<p>지점을 골라 주세요</p></div>') + '<div class="bd nt">' +
+        '<p class="hint" style="margin-top:0">지점마다 회원·기록·이용권이 따로예요. 다른 지점에서도 그 지점의 닉네임과 비밀번호로 들어가요.</p>' +
+        LZ.branchList.map(function (c) {
+          var br = LZ.branches[c], on = c === LZ.branch, ok = LZ.ready(c);
+          return '<button type="button" class="card" data-b="' + c + '" style="width:100%;text-align:left;' + (on ? 'border-color:var(--pri)' : '') + (ok ? '' : 'opacity:.5;cursor:default') + '"' + (ok ? '' : ' disabled') + '><div style="flex:1"><div class="t">' + u.esc(br.name || c) + '</div><div class="s">' + (on ? '지금 쓰는 지점' : ok ? '이 지점으로 바꾸기' : '준비 중이에요') + '</div></div>' + (on ? '<span class="chip r">지금</span>' : ok ? '<span style="font-size:24px;color:var(--mut2)">›</span>' : '') + '</button>';
+        }).join('') + '</div></div>';
+      Array.prototype.forEach.call(root.querySelectorAll('[data-b]'), function (b) {
+        b.onclick = async function () {
+          var c = b.dataset.b; if (c === LZ.branch) { if (LZ.stack.length > 1) history.back(); return; }
+          if (LZ.rec.dirty()) { ui.busy(true, '저장하고 있어요…'); var ok = await LZ.rec.flush(); ui.busy(false); if (!ok) { ui.toast('저장하지 못한 기록이 있어요. 인터넷을 확인하고 다시 해 주세요.', 4500); return; } }
+          LZ.guard = null; LZ.switchBranch(c);
+        };
+      });
+    }
+  };
+
   /* ───── 로그인·로그아웃 ───── */
   LZ.applyFontSize = function () { var f = u.store.get('lz.fs'); document.documentElement.dataset.fs = f === '1' || f === '2' ? f : '0'; };
   LZ.cache = {};                                                   // 코스 목록 등 임시 보관(로그아웃하면 지움)
   LZ.afterLogin = async function (user) {
     S.user = user; u.store.set('lz.nick', user.nick); LZ.cache = {};
-    try { history.replaceState(history.state, '', location.pathname + '?u=' + encodeURIComponent(user.nick)); } catch (e) { /* 무시 */ }
+    try { history.replaceState(history.state, '', location.pathname + LZ.linkQuery(user.nick)); } catch (e) { /* 무시 */ }
     LZ.rec.restore(); LZ.applyFontSize();
     if (user.must) return LZ.go('pin', { first: true }, { reset: true });
     await LZ.go('courses', {}, { reset: true });
@@ -94,7 +117,7 @@
     try {
       var me = await LZ.api('me', {}, { retry: 0 });
       var was = S.user ? S.user.kind + S.user.st + S.user.end : '';
-      S.user = Object.assign({}, S.user, me.user); S.me = { pay: me.pay, pending: me.pending };
+      S.user = Object.assign({}, S.user, me.user); S.me = { pay: me.pay, pending: me.pending, trust: me.trust };
       return was !== S.user.kind + S.user.st + S.user.end;
     } catch (e) { return false; }
   };
@@ -141,8 +164,10 @@
     LZ.pwa.registerSW(function (apply) {
       ui.dialog({ title: '새 버전이 있어요', body: '앱을 새 버전으로 바꿀게요. 잠깐 화면이 다시 열려요.', cancel: false, buttons: [{ label: '지금 바꾸기', kind: 'y', value: true }, { label: '나중에', kind: 'g', value: false }] }).then(function (v) { if (v) apply(); });
     });
-    if (!window.LZ_CONFIG || !window.LZ_CONFIG.API || /^YOUR_/.test(window.LZ_CONFIG.API)) {
-      var b = $('#boot'); b.innerHTML = '<h2>서버 주소가 아직 없어요</h2><p>개발자에게 js/config.js 의 API 주소를 넣어 달라고 해 주세요.</p>'; return;
+    if (!LZ.ready(LZ.branch)) {
+      var b = $('#boot'), nm = (LZ.branchCfg && LZ.branchCfg.name) || '';
+      b.innerHTML = '<h2>' + (nm ? u.esc(nm) + '은(는) 아직 준비 중이에요' : '서버 주소가 아직 없어요') + '</h2><p>매장 운영자에게 문의해 주세요.</p>';
+      return;
     }
     /* 카카오톡 같은 앱 안 브라우저: 기본 브라우저로 열도록 안내 */
     var inapp = LZ.pwa.inApp();
@@ -164,7 +189,7 @@
       LZ.api('logout', {}, { retry: 0, timeout: 5000 }).catch(function () {}); S.token = null; u.store.del('lz.t'); u.store.del('lz.pend');
     }
     if (S.token) {
-      try { var me = await LZ.api('me', {}); S.store = me.store || S.store; S.me = { pay: me.pay, pending: me.pending }; await LZ.afterLogin(me.user); return; }
+      try { var me = await LZ.api('me', {}); S.store = me.store || S.store; S.me = { pay: me.pay, pending: me.pending, trust: me.trust }; await LZ.afterLogin(me.user); return; }
       catch (e) {
         if (e && e.code !== 'auth') { LZ.screens.fatal(e); return; }       // 인터넷 문제 등: 로그아웃시키지 않고 다시 시도 안내
         S.token = null; u.store.del('lz.t');

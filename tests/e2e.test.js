@@ -62,7 +62,7 @@ const WAKE = () => { window.__wl = { req: 0, rel: 0, active: 0 }; Object.defineP
     await A.fill('#nn', '운영자'); await A.click('#kind button[data-k="op"]'); await A.click('#mk'); await dlg(A, '만들기'); await A.waitForSelector('#inv');
     pins.op = (await text(A, '#inv')).match(/처음 비밀번호: (\d{4})/)[1];
     pins.m = await makeMember(A, '다람쥐', 'month'); pins.y = await makeMember(A, '너구리', 'year');
-    assert.ok(/\?u=%EB%84%88%EA%B5%AC%EB%A6%AC/.test(await text(A, '#inv')), '개인 주소');
+    assert.ok(/\?s=yangju&u=%EB%84%88%EA%B5%AC%EB%A6%AC/.test(await text(A, '#inv')), '개인 주소(지점 포함)');
     const x = await text(A); assert.ok(/월간회원 · D-29/.test(x) && /연간회원 · D-364/.test(x), x.slice(0, 400));
     await shot(A, 'a2-members');
   });
@@ -77,7 +77,7 @@ const WAKE = () => { window.__wl = { req: 0, rel: 0, active: 0 }; Object.defineP
     await O.click('.mem:has-text("체험이") [data-mg]'); await O.click('.mp [data-a="trialExt"]'); await dlg(O, '하루 늘리기');
     await O.waitForFunction(() => /체험 연장 1\/2/.test(document.querySelector('#ml').innerText));
     await O.click('.mem:has-text("다람쥐") [data-mg]');
-    const btns = await O.$$eval('.mp button', b => b.map(x => x.dataset.a)); assert.deepStrictEqual(btns, ['pin']);
+    const btns = await O.$$eval('.mp button', b => b.map(x => x.dataset.a)); assert.deepStrictEqual(btns, ['trust', 'pin']);
     assert.strictEqual(env.call({ a: 'setCfg', price_year: 5000 }, (env.call({ a: 'login', nick: '운영자', pin: '5813' })).token).err, 'perm', '운영자는 요금 설정 불가');
   });
 
@@ -136,9 +136,14 @@ const WAKE = () => { window.__wl = { req: 0, rel: 0, active: 0 }; Object.defineP
     assert.ok(/다람쥐님/.test(await text(Y, '#who')));
     await Y.click('#imp'); await Y.waitForSelector('.dlg'); assert.ok(/빈 홀만 채우기 \(2홀\)/.test(await text(Y, '.dlg'))); await dlg(Y, '빈 홀만 채우기');
     await Y.waitForSelector('#ud'); assert.ok(await waitFor(() => { const r = recsOf('너구리'); return r && r[1].r === 'f'; }), '가져온 기록 저장');
+    const trustOf = n => (env.call({ a: 'members' }, admTok()).members.find(m => m.nick === n) || {}).trust;
+    assert.ok(await waitFor(() => trustOf('다람쥐') === 1), '가져가면 다람쥐 신뢰도 1점');
+    await Y.waitForFunction(() => /신뢰도 1점/.test(document.querySelector('#who').innerText));
     await Y.click('#ud'); assert.ok(await waitFor(() => { const r = recsOf('너구리'); return r && !r[0].r && !r[1].r; }), '되돌리기 저장');
+    assert.ok(await waitFor(() => trustOf('다람쥐') === 0), '되돌리면 방금 생긴 1점은 빠짐');
     await Y.click('#imp'); await dlg(Y, '모두 덮어쓰기');
     assert.ok(await waitFor(() => { const r = recsOf('너구리'); return r && r[1].n === 2; }));
+    assert.ok(await waitFor(() => trustOf('다람쥐') === 1), '다시 가져가면 1점');
   });
   await t('D2 비교 분석: 같은 2홀 → 2홀을 우측으로 바꾸면 "다른 홀 1", "좌측으로 4칸 더"', async () => {
     await Y.click('#cmp'); await waitScr(Y, 'compare');
@@ -155,6 +160,14 @@ const WAKE = () => { window.__wl = { req: 0, rel: 0, active: 0 }; Object.defineP
     await Y.check('#om'); assert.strictEqual(await Y.$$eval('#ht .rw:not(.me)', r => r.length), 0);
     await Y.reload(); await waitScr(Y, 'courses').catch(() => {}); await Y.evaluate(id => LZ.go('holes', { id }), cid); await waitScr(Y, 'holes');
     assert.ok(await Y.isChecked('#om'));
+  });
+
+  await t('D4 신뢰도: 다람쥐 코스 화면에 "내 기록 신뢰도 1점" → 누르면 언제·누가(너구리)·어느 코스', async () => {
+    await M.reload(); await waitScr(M, 'courses');
+    assert.ok(/내 기록 신뢰도\s*1점/.test(await text(M, '[data-trust]')), await text(M, '[data-trust]'));
+    await M.click('[data-trust]'); await waitScr(M, 'trust');
+    const x = await text(M); assert.ok(/너구리님/.test(x) && /목행충주호파크골프CD/.test(x) && /2026\. /.test(x), x.slice(0, 400));
+    await shot(M, 'd4-trust'); await M.click('[data-back]'); await waitScr(M, 'courses');
   });
 
   /* ───────── 결제(체험회원) ───────── */
@@ -177,7 +190,10 @@ const WAKE = () => { window.__wl = { req: 0, rel: 0, active: 0 }; Object.defineP
     assert.ok(/체험이님 · 월간회원 1,000원/.test(await text(A))); await shot(A, 'e2-payments');
     await A.click('[data-ok]'); await dlg(A, '승인'); await A.waitForFunction(() => /확인 대기 0건/.test(document.querySelector('#app').innerText));
     await T.click('#chk'); await waitScr(T, 'courses');
-    assert.ok(/월간회원/.test(await text(T, '.hd')), await text(T, '.hd'));
+    const u = await T.evaluate(() => LZ.S.user), today = env.call({ a: 'cfg' }).today;
+    const end = new Date(Date.parse(today + 'T00:00:00Z') + 29 * DAY).toISOString().slice(0, 10);
+    assert.deepStrictEqual([u.kind, u.start, u.end, u.left], ['month', today, end, 29], JSON.stringify(u));
+    assert.strictEqual(await text(T, '.who b'), '체험이'); assert.strictEqual(await text(T, '.who span'), '월간회원 · D-29');
   });
   await t('E3 환불 계산: 7일 이내·기록 안 씀 → 전액 1,000원', async () => {
     await A.click('[data-rf]'); await A.waitForSelector('.dlg h3'); const d = await text(A, '.dlg'); await dlg(A, '취소');
@@ -235,8 +251,44 @@ const WAKE = () => { window.__wl = { req: 0, rel: 0, active: 0 }; Object.defineP
     assert.ok(await waitFor(() => { const r = recsOf('너구리'); return r && r[3].r === 'c'; }, 10000), '다시 열었을 때 저장');
     assert.ok(await Y2.evaluate(() => !localStorage.getItem('lz@yangju.pend')), '저장 후 임시 보관 지움');
   });
+  await t('H6 머리글: 좁은 폰(320px)·긴 닉네임에서도 첫 줄 닉네임(굵게, 오른쪽 정렬), 둘째 줄 회원 종류·D-day가 각각 한 줄', async () => {
+    const at = admTok(); const c = env.call({ a: 'mCreate', nick: '긴닉네임여덟자', kind: 'year' }, at); const tk = env.call({ a: 'login', nick: '긴닉네임여덟자', pin: c.pin }).token;
+    env.call({ a: 'pin', pin: '3925' }, tk);
+    const N = await phone('좁은폰'); await N.setViewportSize({ width: 320, height: 700 });
+    await N.goto('http://localhost:8801/'); await N.evaluate(t => { localStorage.setItem('lz@yangju.t', t); localStorage.setItem('lz@yangju.nick', '긴닉네임여덟자'); }, tk);
+    await N.goto('http://localhost:8801/'); await waitScr(N, 'courses');
+    const g = await N.evaluate(() => { const b = document.querySelector('.who b').getBoundingClientRect(), sp = document.querySelector('.who span').getBoundingClientRect(), hd = document.querySelector('.hd').getBoundingClientRect(); const lh = parseFloat(getComputedStyle(document.querySelector('.who span')).lineHeight) || 16;
+      return { bH: b.height, sH: sp.height, lh, below: sp.top >= b.bottom - 1, right: Math.abs(b.right - sp.right) < 2, fw: getComputedStyle(document.querySelector('.who b')).fontWeight, inside: hd.right >= b.right && b.left >= 0, txt: document.querySelector('.who').innerText }; });
+    assert.ok(g.below && g.right && +g.fw >= 500 && g.inside && g.sH < g.lh * 1.6, JSON.stringify(g));
+    await shot(N, 'h6-narrow-header');
+  });
+  await t('H7 양주만송점: ?s=mansong 링크로 열면 따로인 서버(빈 코스), 지점별 로그인 보관, 초대 링크에 지점, 회원은 지점 바꾸기 없음·관리자만 설정에서', async () => {
+    const W = await phone('만송');
+    await W.goto('http://localhost:8801/?s=mansong'); await waitScr(W, 'login');
+    assert.strictEqual(await text(W, '.pill'), '양주만송점'); assert.ok(!/지점 바꾸기/.test(await text(W)), '로그인 화면에 지점 바꾸기 없음');
+    await W.fill('#nick', '관리자'); await pad(W, srv.pin2); await W.click('#go'); await setPin(W, '2468');
+    assert.ok(/아직 등록된 코스가 없어요/.test(await text(W)), '양주점 코스와 섞이지 않음');
+    const ks = await W.evaluate(() => Object.keys(localStorage)); assert.ok(ks.includes('lz@mansong.t') && await W.evaluate(() => localStorage.getItem('lz.branch')) === 'mansong', ks.join(','));
+    await W.click('[data-tab="members"]'); await waitScr(W, 'members');
+    await W.fill('#nn', '만송이'); await W.click('#kind button[data-k="month"]'); await W.click('#mk'); await W.waitForSelector('#inv');
+    const inv = await text(W, '#inv'); assert.ok(/\?s=mansong&u=/.test(inv), '초대 링크에 지점');
+    const mpin = inv.match(/처음 비밀번호: (\d{4})/)[1];
+    /* 회원: 초대 링크로 들어오면 그 지점, 설정에 지점 바꾸기 없음, 기본 주소로 다시 열어도 그 지점 */
+    const MS = await phone('만송회원');
+    await MS.goto('http://localhost:8801/?s=mansong&u=' + encodeURIComponent('만송이')); await waitScr(MS, 'login'); await pad(MS, mpin); await MS.click('#go'); await setPin(MS, '1357');
+    await MS.click('[data-tab="settings"]'); await waitScr(MS, 'settings'); assert.ok(!(await MS.$('#brc')), '회원 설정에 지점 바꾸기 없음');
+    await MS.goto('http://localhost:8801/'); await waitScr(MS, 'courses'); assert.ok(/만송이/.test(await text(MS, '.who b')), '홈 화면 주소로 열어도 만송점');
+    await MS.evaluate(() => LZ.go('branch', {})); await sleep(300); assert.ok(/관리자만/.test(await text(MS)), '회원이 지점 화면을 억지로 열어도 막힘');
+    /* 관리자: 설정에서 지점 바꾸기, 준비 중 지점은 못 고름 */
+    await W.click('[data-tab="settings"]'); await waitScr(W, 'settings'); await W.click('#brc'); await waitScr(W, 'branch');
+    assert.ok(await W.$eval('[data-b="soon"]', b => b.disabled), '준비 중 지점은 못 고름'); await shot(W, 'h7-branch');
+    await W.click('[data-b="yangju"]'); await W.waitForURL(/\?s=yangju/); await waitScr(W, 'login');
+    assert.strictEqual(await text(W, '.pill'), '제이드 양주점');
+    await W.goto('http://localhost:8801/?s=mansong'); await waitScr(W, 'courses'); assert.ok(/관리자/.test(await text(W, '.who b')), '만송점 로그인은 그대로');
+    assert.strictEqual(srv.env2.call({ a: 'cfg', b: 'yangju' }).err, 'branch', '만송 서버는 양주 요청 거절');
+  });
   await t('H3 지점 코드가 다른 주소로 보내면 서버가 거절', async () => {
-    const r = await A.evaluate(async () => { const res = await fetch(LZ_CONFIG.API, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ a: 'cfg', b: 'uijeongbu' }) }); return res.json(); });
+    const r = await A.evaluate(async () => { const res = await fetch(LZ.branchCfg.API, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ a: 'cfg', b: 'uijeongbu' }) }); return res.json(); });
     assert.strictEqual(r.err, 'branch');
   });
   await t('H4 사전요청(OPTIONS) 없음, 화면 오류 없음', async () => {

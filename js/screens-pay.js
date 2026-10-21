@@ -16,7 +16,33 @@
     if (me.pay && me.pay.ok && !pend) return h + '<div class="ban"><b>' + esc(us.kindName) + '</b> · ' + u.dday(us.left) + ' (' + per + ')<br>지금 연장하면 끝나는 날 다음 날부터 이어서 시작돼요. <button class="sm" data-pay type="button" style="margin-top:6px">연장 결제</button></div>';
     return h + '<div class="hint" style="margin:0 2px 10px">' + esc(us.kindName) + ' · ' + per + ' (' + u.dday(us.left) + ')</div>';
   };
-  LZ.bindMemberBanner = function (root) { $$('[data-pay]', root).forEach(function (b) { b.onclick = function () { LZ.go('pay', {}); }; }); };
+  LZ.bindMemberBanner = function (root) {
+    $$('[data-pay]', root).forEach(function (b) { b.onclick = function () { LZ.go('pay', {}); }; });
+    $$('[data-trust]', root).forEach(function (b) { b.onclick = function () { LZ.go('trust', {}); }; });
+  };
+  /* 내 기록 신뢰도: 다른 회원이 내 기록을 가져다 쓴 수(코스마다 1점) */
+  LZ.trustChip = function () {
+    var t = S.me && typeof S.me.trust === 'number' ? S.me.trust : null;
+    return t === null ? '' : '<button type="button" class="sm" data-trust style="margin:0 0 10px;width:100%;justify-content:space-between"><span>내 기록 신뢰도</span><b style="color:var(--pri)">' + t + '점 ›</b></button>';
+  };
+
+  /* ───── 신뢰도 목록: 언제(가장 최근), 누가, 어느 코스 ───── */
+  LZ.screens.trust = {
+    show: async function (p, root, alive) {
+      var other = p.nick && p.nick !== S.user.nick, title = other ? p.nick + '님 신뢰도' : '내 기록 신뢰도';
+      root.innerHTML = '<div class="scr">' + ui.hdr2(title) + '<div class="bd nt">' + ui.skeleton(3) + '</div></div>';
+      var d = await LZ.api('trust', other ? { nick: p.nick } : {}); if (!alive()) return;
+      if (!other) S.me = Object.assign({}, S.me, { trust: d.trust });
+      function when(ts) { var x = new Date(ts); return x.getFullYear() + '. ' + (x.getMonth() + 1) + '. ' + x.getDate() + '. ' + String(x.getHours()).padStart(2, '0') + ':' + String(x.getMinutes()).padStart(2, '0'); }
+      root.innerHTML = '<div class="scr">' + ui.hdr2(title) + '<div class="bd nt">' +
+        '<div class="sumg" style="grid-template-columns:1fr"><div><b style="font-size:36px;color:var(--pri)">' + d.trust + '점</b>' + (other ? esc(d.nick) + '님 기록을 가져다 쓴 수' : '다른 회원이 내 기록을 가져다 쓴 수') + '</div></div>' +
+        '<p class="hint" style="margin:0 0 10px">한 회원이 한 코스에서 가져다 쓰면 1점이에요. 같은 코스를 여러 번 가져가도 1점이고, 날짜만 가장 최근으로 바뀌어요. 최근 순으로 보여요.</p>' +
+        (d.list.map(function (x) {
+          return '<div class="paybox" role="button" tabindex="0" data-c="' + esc(x.cid) + '" style="cursor:pointer"><div class="t">' + esc(x.course) + '</div><div class="meta"><b>' + esc(x.user) + '님</b>이 가져다 썼어요 · ' + when(x.at) + (x.first !== x.at ? ' (처음 ' + when(x.first).slice(0, -6) + ')' : '') + '</div></div>';
+        }).join('') || '<div class="ann">아직 없어요. 코스에 기록을 남기고 공개해 두면, 다른 회원이 가져다 쓸 때마다 올라가요.</div>') + '</div></div>';
+      $$('[data-c]', root).forEach(function (b) { b.onclick = function () { if (b.dataset.c && !/지워진/.test(b.innerText)) LZ.go('holes', { id: b.dataset.c }); }; });
+    }
+  };
 
   function drawQR(host, text) {
     return u.loadScript('vendor/qrcode.js').then(function () {
@@ -31,7 +57,7 @@
       root.innerHTML = '<div class="scr">' + ui.hdr2('이용권 결제') + '<div class="bd nt">' + ui.skeleton(4) + '</div></div>';
       var d = await LZ.api('payInfo', {}); if (!alive()) return;
       var plan = p.plan || 'year', method = 'kakao', dep = S.user.nick, showHow = false;
-      S.user = Object.assign({}, S.user, d.user); S.me = { pay: d.pay, pending: d.pending };
+      S.user = Object.assign({}, S.user, d.user); S.me = Object.assign({}, S.me, { pay: d.pay, pending: d.pending });
       var nick = S.user.nick;
 
       function head() {
@@ -82,17 +108,21 @@
         var di = $('#dep'); if (di) di.oninput = function () { dep = di.value; };
         bindHow();
         var sb = $('#sent'); if (sb) sb.onclick = async function () {
+          if (sb.dataset.busy) return; sb.dataset.busy = '1';
+          try { await sendIt(); } finally { if (sb.isConnected) delete sb.dataset.busy; }
+        };
+        async function sendIt() {
           var v = (dep || '').trim(); if (!v) return ui.toast('송금할 때 적은 이름을 넣어 주세요.');
           if (!(await ui.confirm('송금하셨나요?', METHOD[method] + '로 ' + u.won(d.prices[plan]) + '을 보냈다고 관리자에게 알려요.\n보낸 분 표시: ' + v, '네, 보냈어요'))) return;
           ui.busy(true, '알리고 있어요…');
           try { var r = await LZ.api('payReq', { plan: plan, method: method, depositor: v }, { retry: 0 }); ui.busy(false); d.pending = r.pending; S.me = Object.assign({}, S.me, { pending: r.pending }); showHow = false; draw(); ui.toast('관리자에게 알렸어요. 확인되면 바로 시작돼요.', 4500); }
           catch (e) { ui.busy(false); ui.toast(ui.errText(e), 5000); }
-        };
+        }
         var ch = $('#chk'); if (ch) ch.onclick = async function () {
           ui.busy(true, '확인하고 있어요…');
           try {
             d = await LZ.api('payInfo', {}, { retry: 0 }); ui.busy(false);
-            S.user = Object.assign({}, S.user, d.user); S.me = { pay: d.pay, pending: d.pending }; LZ.cache.courses = null;
+            S.user = Object.assign({}, S.user, d.user); S.me = Object.assign({}, S.me, { pay: d.pay, pending: d.pending }); LZ.cache.courses = null;
             if (!d.pending) { ui.toast('확인됐어요! ' + d.user.kindName + ' 이용이 시작됐어요. (' + u.period(d.user.start, d.user.end) + ')', 6000); return LZ.go('courses', {}, { reset: true }); }
             ui.toast('아직 확인 전이에요. 조금 뒤에 다시 눌러 주세요.', 3500); draw();
           } catch (e) { ui.busy(false); ui.toast(ui.errText(e), 4500); }
