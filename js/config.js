@@ -12,7 +12,7 @@ window.LZ_CONFIG = {
   DEFAULT: 'yangju',
   BRANCHES: {
     yangju:  { name: '제이드 양주점', API: 'https://script.google.com/macros/s/AKfycbwljj0_EyrOuql6-EQ00J_6h-jgeaWH7hDBtaGRSDkbC49pxL2yMQnVZQYjM25GzDRRtg/exec' },
-    mansong: { name: '양주만송점',   API: 'https://script.google.com/macros/s/AKfycbzgBYuiRMdikw5_7zH9cPWsgggViwOZCRbZYZnbfUZ2JX54QpnsMxMvUU3Mj7DF_GLx2w/exec' }
+    mansong: { name: '양주만송점',   API: 'https://script.google.com/macros/s/AKfycbzgBYuiRMdikw5_7zH9cPWsgggViwOZCRbZYZnbfUZ2JX54QpnsMxMvUU3Mj7DF_GLx2w/exec' },
     suyu: { name: '강북수유점',   API: 'YOUR_MANSONG_APPS_SCRIPT_URL' }
   }
 };
