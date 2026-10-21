@@ -4,6 +4,6 @@
  *          나중에 여러 지점을 운영할 때 지점을 구분하는 열쇠예요. 한 번 정하면 바꾸지 마세요.
  *  비밀번호나 열쇠는 들어 있지 않아서, 저장소가 공개(Public)여도 안전합니다. */
 window.LZ_CONFIG = {
-  API: 'https://script.google.com/macros/library/d/1aUxH_xJwTpLsMenB3QZnU6j8tA6djCE7ZdHzvxLhqGEs2Xe7s8-tpbsp/2',
+  API: 'https://script.google.com/macros/s/AKfycbwljj0_EyrOuql6-EQ00J_6h-jgeaWH7hDBtaGRSDkbC49pxL2yMQnVZQYjM25GzDRRtg/exec',
   BRANCH: 'yangju'
 };
