@@ -19,6 +19,7 @@
 
   /* ───── 지점: 화면(이 주소)은 하나, 서버·시트는 지점마다 따로 ─────
    * 주소 끝의 ?s=지점코드 로 지점을 고르고, 폰이 마지막 지점을 기억합니다. 없으면 기본 지점(DEFAULT). */
+  LZ.configBroken = !window.LZ_CONFIG;                                           // config.js 에 쉼표·따옴표 실수가 있으면 파일 전체를 못 읽음
   var C = window.LZ_CONFIG || {}, B = {}, clean = function (x) { return String(x || '').toLowerCase().replace(/[^a-z0-9]/g, ''); };
   if (C.BRANCHES) for (var bk in C.BRANCHES) { if (clean(bk)) B[clean(bk)] = { code: clean(bk), name: C.BRANCHES[bk].name || '', API: C.BRANCHES[bk].API || '' }; }
   else B[clean(C.BRANCH) || 'main'] = { code: clean(C.BRANCH) || 'main', name: '', API: C.API || '' };     // 예전 설정 모양(API·BRANCH 한 개)

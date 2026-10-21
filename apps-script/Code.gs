@@ -621,8 +621,10 @@ function privateMap_() {
   for (var i = 0; i < r.length; i++) if (num_(r[i][2]) === 0) m[nickKey_(r[i][0]) + '|' + String(r[i][1])] = true;
   return m;
 }
+function regOf_(c) { var p = String(c.reg || '').split('@'); return { nick: p[0], from: p[1] || '' }; }   // '다람쥐@제이드 양주점' = 다른 지점에서 가져온 코스
 function courseView_(c, u, st) {
-  return { id: c.id, name: c.name, reg: c.reg, holes: c.holes, stage: c.stage, canEdit: canEditCourse_(c, u, st), mineReg: mineCourse_(c, u) };
+  var rg = regOf_(c);
+  return { id: c.id, name: c.name, reg: rg.nick, regFrom: rg.from, holes: c.holes, stage: c.stage, canEdit: canEditCourse_(c, u, st), mineReg: mineCourse_(c, u) };
 }
 
 function aCourses(q, ctx) {
@@ -1159,6 +1161,59 @@ function installTriggers_() {
   var ts = ScriptApp.getProjectTriggers();
   for (var i = 0; i < ts.length; i++) if (ts[i].getHandlerFunction() === 'dailyMaintenance') return;
   ScriptApp.newTrigger('dailyMaintenance').timeBased().everyDays(1).atHour(4).create();
+}
+
+/**
+ * ★ 다른 지점 시트를 "사본 만들기"로 복사해서 새 지점을 만들 때, 사본에서 한 번만 실행합니다.
+ *
+ *  먼저 할 일
+ *   1) 이 파일 맨 위의 BRANCH(예: 'mansong')와 STORE_DEFAULT(예: '양주만송점')를 새 지점 것으로 바꾸고 저장
+ *   2) 원래 지점 Apps Script → ⚙ 프로젝트 설정 → 스크립트 속성의 PEPPER 값을 복사해서,
+ *      이 사본의 스크립트 속성에 PEPPER 로 추가 (그래야 관리자가 원래 지점과 같은 비밀번호로 들어올 수 있어요)
+ *
+ *  하는 일
+ *   - 남김: 관리자 계정, 코스 목록(이름·파·거리), 요금·QR·계좌·좌석·로고 설정
+ *   - 지움: 다른 회원, 기록, 공개 설정, 결제, 로그인 기록, 이력, 신뢰도, 원래 지점의 백업 시트, 등록이 끝나지 않은(전반만) 코스
+ *   - 바꿈: 지점 코드·매장 이름. 가져온 코스는 "원래 지점에서 등록"으로 표시해서, 수정은 운영자·관리자만 할 수 있게
+ *   - 마지막에 setup 을 실행(매일 새벽 정리 예약 등)
+ */
+function makeNewBranchFromCopy() {
+  var s0 = settings_(), oldBranch = String(s0.branch || ''), oldStore = String(s0.store || '원래 지점');
+  if (!oldBranch || oldBranch === BRANCH) {
+    var m0 = '맨 위의 BRANCH 를 새 지점 코드로 바꾸고 저장한 뒤 다시 실행해 주세요. (지금 BRANCH = ' + BRANCH + ', 시트의 지점 = ' + (oldBranch || '없음') + ')';
+    console.log(m0); tryUi_('먼저 지점 코드를 바꿔 주세요', m0); return m0;
+  }
+  if (!PropertiesService.getScriptProperties().getProperty('PEPPER')) {
+    var m1 = '스크립트 속성에 PEPPER 가 없어요.\n원래 지점 Apps Script → ⚙ 프로젝트 설정 → 스크립트 속성의 PEPPER 값을 복사해서, 이 사본의 스크립트 속성에 PEPPER 로 추가한 뒤 다시 실행해 주세요.\n(아무것도 바꾸지 않았어요)';
+    console.log(m1); tryUi_('PEPPER 를 먼저 옮겨 주세요', m1); return m1;
+  }
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) { var m2 = '지금 앱을 쓰는 분이 있어서 잠시 뒤에 다시 실행해 주세요.'; console.log(m2); return m2; }
+  try {
+    var admins = [], n = { users: 0, courses: 0, front: 0 };
+    rewrite_('users', function (r) { var keep = str_(r[1]) === 'admin'; if (keep) admins.push(str_(r[0])); else n.users++; return keep; });
+    ['sessions', 'records', 'prefs', 'payments', 'log', 'uses'].forEach(function (name) { rewrite_(name, function () { return false; }); });
+    rewrite_('courses', function (r) { var done = (str_(r[8]) || 'done') === 'done'; if (!done) n.front++; return done; });
+    var cs = sheet_('courses'), last = cs.getLastRow();
+    for (var i = 2; i <= last; i++) {
+      var reg = str_(cs.getRange(i, 4).getValue());
+      if (reg && reg.indexOf('@') < 0) cs.getRange(i, 4).setValue(reg + '@' + oldStore);      // 다른 지점에서 가져온 코스 표시
+      n.courses++;
+    }
+    var ss = ss_();
+    ss.getSheets().forEach(function (sh) { if (/^bk\d{6}_/.test(sh.getName())) ss.deleteSheet(sh); });   // 원래 지점 데이터가 든 백업 시트
+    setSetting_('branch', BRANCH); setSetting_('store', STORE_DEFAULT);
+    ['cfg', 'courses', 'seats', 'queue'].forEach(function (k) { cache_().remove(k); });
+    try { SpreadsheetApp.flush(); } catch (e) { /* 무시 */ }
+  } finally { lock.releaseLock(); }
+  var msg = '새 지점 준비 완료: ' + STORE_DEFAULT + ' (' + BRANCH + ')\n' +
+    '· 남긴 관리자: ' + (admins.join(', ') || '없음 — setup 이 새로 만들어요') + '\n· 남긴 코스: ' + n.courses + '곳 (수정은 운영자·관리자만)\n' +
+    '· 지운 회원: ' + n.users + '명' + (n.front ? ', 등록이 끝나지 않은 코스 ' + n.front + '곳' : '') + '\n' +
+    '이제 배포 → 배포 관리 → ✏️ → 새 버전 → 배포 를 해 주세요.';
+  console.log(msg);
+  setup();
+  tryUi_('새 지점 준비 완료', msg);
+  return msg;
 }
 
 /** 개발자용: 관리자 비밀번호를 잊었을 때 새로 만듭니다. */

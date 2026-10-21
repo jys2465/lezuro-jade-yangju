@@ -164,6 +164,10 @@
     LZ.pwa.registerSW(function (apply) {
       ui.dialog({ title: '새 버전이 있어요', body: '앱을 새 버전으로 바꿀게요. 잠깐 화면이 다시 열려요.', cancel: false, buttons: [{ label: '지금 바꾸기', kind: 'y', value: true }, { label: '나중에', kind: 'g', value: false }] }).then(function (v) { if (v) apply(); });
     });
+    if (LZ.configBroken) {
+      $('#boot').innerHTML = '<h2>설정 파일(js/config.js)을 읽지 못했어요</h2><p>지점 줄 끝의 <b>쉼표(,)</b>가 빠졌거나 따옴표(\')가 짝이 맞지 않을 때 생겨요. 줄과 줄 사이마다 쉼표가 있는지 확인해 주세요.</p>';
+      return;
+    }
     if (!LZ.ready(LZ.branch)) {
       var b = $('#boot'), nm = (LZ.branchCfg && LZ.branchCfg.name) || '';
       b.innerHTML = '<h2>' + (nm ? u.esc(nm) + '은(는) 아직 준비 중이에요' : '서버 주소가 아직 없어요') + '</h2><p>매장 운영자에게 문의해 주세요.</p>';

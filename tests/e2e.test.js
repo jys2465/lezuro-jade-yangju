@@ -134,6 +134,7 @@ const WAKE = () => { window.__wl = { req: 0, rel: 0, active: 0 }; Object.defineP
     await firstLogin(Y, '너구리', pins.y, '6482');
     await Y.click(`.card[data-id="${cid}"]`); await waitScr(Y, 'holes');
     assert.ok(/다람쥐님/.test(await text(Y, '#who')));
+    assert.ok(/운영자에게 수정을 요청/.test(await text(Y)) && !(await Y.$('#info')), '등록자가 아니면 수정 단추 대신 운영자 요청 안내');
     await Y.click('#imp'); await Y.waitForSelector('.dlg'); assert.ok(/빈 홀만 채우기 \(2홀\)/.test(await text(Y, '.dlg'))); await dlg(Y, '빈 홀만 채우기');
     await Y.waitForSelector('#ud'); assert.ok(await waitFor(() => { const r = recsOf('너구리'); return r && r[1].r === 'f'; }), '가져온 기록 저장');
     const trustOf = n => (env.call({ a: 'members' }, admTok()).members.find(m => m.nick === n) || {}).trust;

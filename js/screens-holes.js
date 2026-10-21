@@ -78,7 +78,8 @@
         var ex = ui.expired(), pk = cur.pick;
         root.innerHTML = '<div class="scr">' + ui.hdr2(c.name) + '<div class="bd nt" style="padding:10px 8px calc(24px + var(--sab))">' +
           '<div class="ban g" id="wk" style="display:none;margin:0 4px 8px"></div>' +
-          '<div class="hint" style="margin:0 6px 8px">18홀 · 파 ' + par() + ' · 총 ' + u.fmt(total()) + 'm · 처음 등록한 분: ' + esc(c.reg) + '님</div>' +
+          '<div class="hint" style="margin:0 6px 8px">18홀 · 파 ' + par() + ' · 총 ' + u.fmt(total()) + 'm · 처음 등록한 분: ' + esc(c.reg) + '님' + (c.regFrom ? ' (' + esc(c.regFrom) + ')' : '') + '</div>' +
+          (c.canEdit ? '' : '<div class="ban" style="margin:0 4px 8px">' + (c.regFrom ? '이 코스는 다른 지점(' + esc(c.regFrom) + ')에서 등록한 코스예요. ' : '') + '코스 정보(파·거리·이름)를 고쳐야 하면 <b>운영자에게 수정을 요청</b>해 주세요.</div>') +
           (c.canEdit ? '<div style="margin:0 4px 8px"><button class="sm" id="info" type="button">파·거리 고치기</button></div>' : '') +
           (ex ? '<div class="ban r" style="margin:8px 4px">이용 기간이 끝나서 다른 회원 기록은 볼 수 없고, 내 기록도 읽기만 돼요. <button class="sm" id="payb" type="button" style="margin-top:6px">이용권 결제하기</button></div>'
             : pk ? '<div class="blk" style="margin:0 4px 8px"><div class="row2" style="margin:0 0 8px"><span style="font-size:14px;color:var(--mut)">참고할 회원</span><button class="sm" id="who" type="button"><b>' + esc(pk.nick) + '님</b>&nbsp;· 신뢰도 ' + (pk.trust || 0) + '점 ▾</button></div><div id="wl" style="display:none;margin:0 0 8px"></div>' +

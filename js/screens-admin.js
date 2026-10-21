@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var LZ = window.LZ, u = LZ.u, ui = LZ.ui, $ = u.$, $$ = u.$$, esc = u.esc, S = LZ.S, P = LZ.pwa;
-  var VERSION = '2.1.0';
+  var VERSION = '2.1.1';
   LZ.appUrl = function () { return location.origin + location.pathname.replace(/index\.html$/, ''); };
 
   /* ───── 설정 ───── */

@@ -352,4 +352,40 @@ t('새 버전 탭(신뢰도)이 없는 예전 시트: setup 을 안 돌려도 �
   assert.ok(env.ss.getSheetByName('신뢰도'), '탭이 생김');
 });
 
+t('사본으로 새 지점 만들기(makeNewBranchFromCopy): 관리자·코스만 남고 나머지 비움, 같은 비밀번호, 가져온 코스는 운영진만 수정', () => {
+  const vm = require('vm');
+  const A = fresh(); const env = A.env;
+  const m = A.mk('다람쥐', 'month'), y = A.mk('너구리', 'year'), op = A.mk('운영이', 'op');
+  const cid = A.reg(m.tok, '양주코스AB'); A.save(m.tok, cid, [{ i: 0, rec: rec('c', 1) }]);
+  const fr = A.front(y.tok, '반쪽코스AB', { confirm: 1 }); assert.ok(fr.ok);
+  env.call({ a: 'use', cid, from: '다람쥐' }, y.tok); env.call({ a: 'payReq', plan: 'month' }, A.mk('체험이', 'trial').tok);
+  env.state.now += 86400000; env.ctx.dailyMaintenance(); assert.ok(env.ss.sheets.some(s => /^bk/.test(s.name)), '백업 시트 있음');
+  /* 1) BRANCH 를 안 바꾸면 아무것도 안 함 */
+  assert.ok(/BRANCH 를 새 지점 코드로/.test(env.ctx.makeNewBranchFromCopy())); assert.ok(env.call({ a: 'me' }, m.tok).ok, '그대로');
+  /* 2) PEPPER 가 없으면(사본) 아무것도 안 함 */
+  vm.runInContext("BRANCH = 'mansong'; STORE_DEFAULT = '양주만송점';", env.ctx);
+  const pep = env.props.PEPPER; delete env.props.PEPPER;
+  assert.ok(/PEPPER/.test(env.ctx.makeNewBranchFromCopy())); assert.strictEqual(env.ss.getSheetByName('회원').getLastRow(), 6, '회원 그대로(관리자+4명)');
+  env.props.PEPPER = pep;
+  /* 3) 정리 */
+  const msg = env.ctx.makeNewBranchFromCopy(); assert.ok(/새 지점 준비 완료/.test(msg), msg);
+  const c = env.call({ a: 'cfg', b: 'mansong' }); assert.deepStrictEqual([c.branch, c.store], ['mansong', '양주만송점']);
+  assert.strictEqual(env.call({ a: 'cfg', b: 'yangju' }).err, 'branch', '양주 주소로는 안 들어옴');
+  const users = []; const us = env.ss.getSheetByName('회원'); for (let r = 2; r <= us.getLastRow(); r++) users.push(us.getRange(r, 1).getValue());
+  assert.deepStrictEqual(users, ['관리자']);
+  ['로그인기록', '기록', '공개설정', '결제', '신뢰도'].forEach(n => assert.strictEqual(env.ss.getSheetByName(n).getLastRow(), 1, n + ' 비움'));
+  assert.ok(!env.ss.sheets.some(s => /^bk/.test(s.name)), '원래 지점 백업 시트 지움');
+  const at = env.call({ a: 'login', nick: '관리자', pin: '8259', b: 'mansong' }); assert.ok(at.ok, '관리자는 원래 지점과 같은 비밀번호');
+  const list = env.call({ a: 'courses', b: 'mansong' }, at.token).courses; assert.deepStrictEqual(list.map(x => x.name), ['양주코스AB'], '끝난 코스만 남음');
+  /* 가져온 코스: 같은 닉네임 회원이 생겨도 등록자 권한 없음, 운영자는 수정 가능 */
+  const dm = env.call({ a: 'mCreate', nick: '다람쥐', kind: 'year', b: 'mansong' }, at.token); const dt = env.call({ a: 'login', nick: '다람쥐', pin: dm.pin }).token;
+  const v = env.call({ a: 'course', id: cid }, dt).course; assert.deepStrictEqual([v.reg, v.regFrom, v.canEdit], ['다람쥐', '제이드 양주점', false]);
+  assert.strictEqual(env.call({ a: 'editCourse', id: cid, front: Array.from({ length: 9 }, () => [3, 40]) }, dt).err, 'perm');
+  const oc = env.call({ a: 'mCreate', nick: '만송운영', kind: 'op' }, at.token); const ot = env.call({ a: 'login', nick: '만송운영', pin: oc.pin }).token;
+  assert.strictEqual(env.call({ a: 'course', id: cid }, ot).course.canEdit, true);
+  assert.ok(env.call({ a: 'editCourse', id: cid, front: Array.from({ length: 9 }, () => [3, 40]) }, ot).ok, '운영자는 수정');
+  assert.strictEqual(env.call({ a: 'course', id: cid }, dt).course.regFrom, '제이드 양주점', '수정해도 원래 지점 표시 유지');
+  assert.ok(env.triggers.some(t => t.getHandlerFunction() === 'dailyMaintenance'), '매일 정리 예약');
+});
+
 console.log(`\n결과: ${ok} 통과 / ${bad} 실패`); process.exit(bad ? 1 : 0);
