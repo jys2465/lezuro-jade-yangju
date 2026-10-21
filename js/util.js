@@ -17,18 +17,34 @@
   u.key = function (s) { return u.stripSpaces(s).toLowerCase(); };
   u.debounce = function (fn, ms) { var t; var f = function () { var a = arguments, c = this; clearTimeout(t); t = setTimeout(function () { fn.apply(c, a); }, ms); }; f.cancel = function () { clearTimeout(t); }; return f; };
 
-  /* 기기 저장소(실패해도 앱이 멈추지 않게) */
+  /* 지점 코드: 나중에 여러 지점을 한 주소에서 운영할 때 지점을 구분 */
+  LZ.branch = String((window.LZ_CONFIG && window.LZ_CONFIG.BRANCH) || 'main').toLowerCase().replace(/[^a-z0-9]/g, '') || 'main';
+  /* 기기 저장소(실패해도 앱이 멈추지 않게).
+   * 로그인·기록·임시 저장 같은 값은 지점마다 따로 보관하고("lz@지점코드."), 화면 모드·글씨 크기처럼 폰 전체 설정은 함께 씀 */
+  var SHARED = /^lz\.(theme|fs|hintOff|hintAt|installed|inappOk)$/;
+  function nk(k) { return /^lz\./.test(k) && !SHARED.test(k) ? 'lz@' + LZ.branch + '.' + k.slice(3) : k; }
+  try {                                                                          // 예전 버전(지점 코드 없음)에 남은 값을 이 지점으로 옮김
+    if (!localStorage.getItem('lz@' + LZ.branch + '.moved')) {
+      for (var i = localStorage.length - 1; i >= 0; i--) {
+        var k0 = localStorage.key(i);
+        if (k0 && /^lz\./.test(k0) && !SHARED.test(k0) && localStorage.getItem(nk(k0)) === null) localStorage.setItem(nk(k0), localStorage.getItem(k0));
+      }
+      localStorage.setItem('lz@' + LZ.branch + '.moved', '1');
+    }
+  } catch (e) { /* 무시 */ }
   u.store = {
-    get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
-    set: function (k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } },
-    del: function (k) { try { localStorage.removeItem(k); } catch (e) { /* 무시 */ } },
-    getJSON: function (k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
+    get: function (k) { try { return localStorage.getItem(nk(k)); } catch (e) { return null; } },
+    set: function (k, v) { try { localStorage.setItem(nk(k), v); return true; } catch (e) { return false; } },
+    del: function (k) { try { localStorage.removeItem(nk(k)); } catch (e) { /* 무시 */ } },
+    getJSON: function (k) { try { return JSON.parse(u.store.get(k)); } catch (e) { return null; } },
     setJSON: function (k, v) { return u.store.set(k, JSON.stringify(v)); }
   };
 
   /* 기록 한 칸: r=기준(f 최초화면, c 홀컵, u 내가 정한 곳) t=이름 d=방향(L/R) n=칸 o=참고사항 */
-  u.emptyRec = function () { return { r: '', t: '', d: 'R', n: 0, p: 0, o: '' }; };
-  u.cloneRec = function (r) { return { r: r.r || '', t: r.t || '', d: r.d === 'L' ? 'L' : 'R', n: r.n | 0, p: r.p | 0, o: r.o || '' }; };
+  u.PW0 = 17;                                                                                       // 타격감 기본값(17 = 50M)
+  u.emptyRec = function () { return { r: '', t: '', d: 'R', n: 0, p: u.PW0, o: '' }; };
+  u.cloneRec = function (r) { var p = r.p | 0; return { r: r.r || '', t: r.t || '', d: r.d === 'L' ? 'L' : 'R', n: r.n | 0, p: p >= 8 && p <= 40 ? p : u.PW0, o: r.o || '' }; };
+  u.side = function (d) { return d === 'L' ? '좌측' : '우측'; };
   /* 타격감: 17 = 50M, 1마다 5M → "17(50M) 정도" */
   u.pwM = function (p) { return 5 * p - 35; };
   u.pwText = function (p) { return p ? p + '(' + u.pwM(p) + 'M) 정도' : ''; };
@@ -36,12 +52,31 @@
   function base(r) { return r.r === 'f' ? '최초화면' : r.r === 'c' ? '홀컵' : (r.t || '내가 정한 곳'); }
   u.sent = function (r) {
     if (!r || !r.r) return null;
-    return (r.n ? base(r) + '에서 ' + (r.d === 'L' ? '왼쪽' : '오른쪽') + ' ' + r.n + '칸' : base(r) + ' 그대로') + (r.p ? ' · 타격감 ' + u.pwText(r.p) : '');
+    return (r.n ? base(r) + '에서 ' + u.side(r.d) + ' ' + r.n + '칸' : base(r) + ' 그대로') + (r.p ? ' · 타격감 ' + u.pwText(r.p) : '');
   };
   u.sentHTML = function (r) {
     if (!r || !r.r) return '<span class="none">아직 기록하지 않았어요</span>';
     var b = u.esc(base(r));
-    return (r.n ? b + '에서 <span class="dv ' + r.d + '">' + (r.d === 'L' ? '왼쪽' : '오른쪽') + ' ' + r.n + '칸</span>' : b + ' 그대로') + (r.p ? '<span class="pw">타격감 ' + u.pwText(r.p) + '</span>' : '');
+    return (r.n ? b + '에서 <span class="dv ' + r.d + '">' + u.side(r.d) + ' ' + r.n + '칸</span>' : b + ' 그대로') + (r.p ? '<span class="pw">타격감 ' + u.pwText(r.p) + '</span>' : '');
+  };
+  u.base = base;
+  /* 날짜 'YYYY-MM-DD' → '10월 21일' / 기간 표시 */
+  u.md = function (d) { if (!d) return ''; var a = String(d).split('-'); return (+a[1]) + '월 ' + (+a[2]) + '일'; };
+  u.ymd = function (d) { if (!d) return ''; var a = String(d).split('-'); return a[0] + '. ' + (+a[1]) + '. ' + (+a[2]) + '.'; };
+  u.period = function (s, e) { return s && e ? u.ymd(s) + ' ~ ' + u.ymd(e) : ''; };
+  u.won = function (n) { return (Number(n) || 0).toLocaleString('ko-KR') + '원'; };
+  u.ago = function (ts) {
+    if (!ts) return '접속 기록 없음';
+    var m = Math.floor((Date.now() - ts) / 60000);
+    if (m < 10) return '지금 접속 중'; if (m < 60) return m + '분 전'; if (m < 1440) return Math.floor(m / 60) + '시간 전';
+    return Math.floor(m / 1440) + '일 전';
+  };
+  /* 필요할 때만 불러오는 파일(QR 라이브러리 등) */
+  var loaded = {};
+  u.loadScript = function (src) {
+    if (loaded[src]) return loaded[src];
+    loaded[src] = new Promise(function (res, rej) { var s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = function () { delete loaded[src]; rej(new Error('파일을 불러오지 못했어요: ' + src)); }; document.head.appendChild(s); });
+    return loaded[src];
   };
   u.dday = function (left) { return left === null || left === undefined ? '' : left > 0 ? 'D-' + left : left === 0 ? '오늘까지' : '기간 끝남'; };
 

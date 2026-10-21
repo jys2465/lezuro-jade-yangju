@@ -48,20 +48,48 @@
     return '<div class="err"><p>' + esc(msg) + '</p><button class="btn" data-retry style="max-width:260px;margin:0 auto">다시 시도</button></div>';
   };
 
-  ui.tag = function (usr) {
-    if (!usr) return '';
-    var l = usr.kind === 'op' ? '운영자' : usr.kind === 'fixed' ? '고정회원' : (usr.st === 'term_expired' ? '기간 끝남' : '기간회원 ' + u.dday(usr.left));
-    return esc(usr.nick) + ' · ' + l;
+  ui.isStaff = function (usr) { usr = usr || LZ.S.user; return !!usr && (usr.kind === 'admin' || usr.kind === 'op'); };
+  ui.isAdmin = function (usr) { usr = usr || LZ.S.user; return !!usr && usr.kind === 'admin'; };
+  ui.expired = function () { return !!LZ.S.user && LZ.S.user.st === 'expired'; };
+  /* 등급 이름 + 남은 날 */
+  ui.kindLabel = function (m) {
+    if (!m) return '';
+    var n = m.kindName || { admin: '관리자', op: '운영자', trial: '체험회원', month: '월간회원', year: '연간회원' }[m.kind] || m.kind;
+    if (m.kind === 'admin' || m.kind === 'op') return n;
+    if (m.st === 'expired') return n + ' · 기간 끝남';
+    return n + ' · ' + u.dday(m.left);
   };
+  ui.tag = function (usr) { return usr ? esc(usr.nick) + ' · ' + esc(ui.kindLabel(usr)) : ''; };
+  /* ───── 화면 모드: 'light' 밝게, 'dark' 어둡게, 'auto' 휴대폰 설정대로(처음 값) ───── */
+  var T = LZ.theme = {
+    mode: function () { var m = u.store.get('lz.theme'); return m === 'light' || m === 'dark' ? m : 'auto'; },
+    sysDark: function () { return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); },
+    isDark: function () { var m = T.mode(); return m === 'dark' || (m === 'auto' && T.sysDark()); },
+    apply: function () {
+      var d = T.isDark(); document.documentElement.dataset.theme = d ? 'dark' : 'light';
+      var meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = d ? '#17191E' : '#FFFFFF';
+      Array.prototype.forEach.call(document.querySelectorAll('[data-thm]'), function (b) { b.innerHTML = ui.themeIcon(); b.setAttribute('aria-label', d ? '밝은 화면으로 바꾸기' : '어두운 화면으로 바꾸기'); });
+    },
+    set: function (m) { if (m === 'auto') u.store.del('lz.theme'); else u.store.set('lz.theme', m); T.apply(); },
+    toggle: function () { T.set(T.isDark() ? 'light' : 'dark'); }
+  };
+  if (window.matchMedia) { var mq = window.matchMedia('(prefers-color-scheme: dark)'); var onSys = function () { if (T.mode() === 'auto') T.apply(); }; if (mq.addEventListener) mq.addEventListener('change', onSys); else if (mq.addListener) mq.addListener(onSys); }
+  ui.themeIcon = function () {
+    return T.isDark()
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>';
+  };
+  ui.themeBtn = function () { var d = T.isDark(); return '<button type="button" class="thm" data-thm aria-label="' + (d ? '밝은 화면으로 바꾸기' : '어두운 화면으로 바꾸기') + '">' + ui.themeIcon() + '</button>'; };
+
   ui.logo = function (slot) { return '<img src="' + esc(LZ.S.logos[slot]) + '" alt="레저로 스크린 파크골프">'; };
   ui.hdr = function (sub) {
-    return '<header class="hd">' + ui.logo('dark') + '<div class="who">' + ui.tag(LZ.S.user) + '</div></header>' +
+    return '<header class="hd">' + ui.logo('light') + '<div class="rt"><div class="who">' + ui.tag(LZ.S.user) + '</div>' + ui.themeBtn() + '</div></header>' +
       '<div class="store"><b>' + esc(LZ.S.store) + '</b><span>' + esc(sub || '') + '</span></div>';
   };
   /* 안쪽 화면 머리글: ← 버튼, 제목, 오른쪽 문구 */
   ui.hdr2 = function (title, right, noBack) {
     return '<header class="hd2">' + (noBack ? '<span style="width:12px"></span>' : '<button class="bk" data-back aria-label="뒤로">←</button>') +
-      '<span class="ttl">' + esc(title) + '</span>' + (right || '') + '</header><div class="store cp"><b>' + esc(LZ.S.store) + '</b><span>레저로 스크린 파크골프</span></div>';
+      '<span class="ttl">' + esc(title) + '</span>' + (right || '') + ui.themeBtn() + '<span style="width:6px"></span></header><div class="store cp"><b>' + esc(LZ.S.store) + '</b><span>레저로 스크린 파크골프</span></div>';
   };
 
   var ICON = {
@@ -72,7 +100,7 @@
   ui.icon = function (n) { return ICON[n] || ''; };
   ui.tabs = function (cur) {
     var list = [['courses', '코스']];
-    if (LZ.S.user && LZ.S.user.kind === 'op') list.push(['members', '회원']);
+    if (ui.isStaff()) list.push(['members', '회원']);
     list.push(['settings', '설정']);
     return '<nav class="tabs" aria-label="주 메뉴">' + list.map(function (x) {
       return '<button data-tab="' + x[0] + '" class="' + (x[0] === cur ? 'on' : '') + '" ' + (x[0] === cur ? 'aria-current="page"' : '') + '>' + ICON[x[0]] + x[1] + '</button>';
@@ -95,6 +123,25 @@
       draw(); if (onChange) onChange(v);
     });
     return { get value() { return v; }, reset: function () { v = ''; draw(); if (onChange) onChange(v); } };
+  };
+
+  /* 화면 꺼짐 방지 안내 띠 */
+  ui.wakeBan = function (host) {
+    if (!host) return;
+    LZ.wake.onchange = function (m) {
+      if (!host.isConnected) return;
+      if (m === 'lock' || m === 'video') { host.style.display = 'block'; host.className = 'ban g'; host.textContent = '이 코스를 보는 동안 휴대폰 화면이 꺼지지 않아요.'; }
+      else if (m === 'none') { host.style.display = 'block'; host.className = 'ban'; host.textContent = '이 휴대폰에서는 화면 꺼짐 방지가 안 될 수 있어요. 휴대폰 설정에서 "화면 자동 꺼짐" 시간을 길게 해 주세요.'; }
+      else host.style.display = 'none';
+    };
+    LZ.wake.onchange(LZ.wake.mode);
+  };
+  /* 되돌리기 단추가 있는 알림 */
+  ui.toastUndo = function (msg, label, fn, ms) {
+    var t = $('#toast'); if (!t) return;
+    t.innerHTML = esc(msg) + ' <button type="button">' + esc(label || '되돌리기') + '</button>'; t.classList.add('on'); clearTimeout(toastT);
+    $('button', t).onclick = function () { t.classList.remove('on'); fn(); };
+    toastT = setTimeout(function () { t.classList.remove('on'); }, ms || 8000);
   };
 
   /* 서버 오류를 사람이 읽을 문구로 */

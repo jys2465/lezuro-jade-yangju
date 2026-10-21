@@ -5,16 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>레저로 파크골프 방향 기록장</title>
 <meta name="description" content="레저로 스크린 파크골프 회원을 위한 코스별 방향 기록장">
-<meta name="theme-color" content="#111A39">
+<meta name="theme-color" content="#FFFFFF">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="파크골프기록">
 <meta name="format-detection" content="telephone=no">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icons/favicon-32.png">
 <link rel="preload" href="assets/fonts/NotoSansKR-Regular.woff2" as="font" type="font/woff2" crossorigin>
+<script>
+/* 화면 모드(밝게·어둡게)를 그리기 전에 먼저 정함 — 하얗게 번쩍이지 않게 */
+(function () {
+  var m; try { m = localStorage.getItem('lz.theme'); } catch (e) { m = null; }
+  var d = m === 'dark' || (m !== 'light' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.dataset.theme = d ? 'dark' : 'light';
+  var t = document.querySelector('meta[name="theme-color"]'); if (t) t.content = d ? '#17191E' : '#FFFFFF';
+})();
+</script>
 <link rel="stylesheet" href="css/app.css">
 <script>
 /* 시작 감시: 6초 안에 앱이 시작하지 못하면 이유를 화면에 알려 줍니다 */
@@ -53,6 +62,7 @@
 <script defer src="js/screens-auth.js"></script>
 <script defer src="js/screens-courses.js"></script>
 <script defer src="js/screens-holes.js"></script>
+<script defer src="js/screens-pay.js"></script>
 <script defer src="js/screens-admin.js"></script>
 <script defer src="js/app.js"></script>
 </body>

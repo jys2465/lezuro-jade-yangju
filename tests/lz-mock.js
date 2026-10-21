@@ -30,6 +30,7 @@ class Sheet {
   getRange(a, b, c, d) { if (typeof a === 'string') { const [r, cc] = a1(a); return new Range(this, r, cc, 1, 1); } return new Range(this, a, b, c || 1, d || 1); }
   getLastRow() { let m = 0; for (const k in this.cells) { const v = this.cells[k]; if (v !== '' && v !== null && v !== undefined) m = Math.max(m, +k.split(',')[0]); } return m; }
   insertRowsAfter(pos, n) { if (n < 1) throw new Error('bad n'); this.maxRows += n; }
+  insertColumnsAfter(pos, n) { this.maxCols += n; }
   deleteRows(start, n) {
     const out = {}, fm = {};
     for (const k in this.cells) { const [r, c] = k.split(',').map(Number); if (r >= start && r < start + n) continue; out[(r >= start + n ? r - n : r) + ',' + c] = this.cells[k]; }
@@ -85,8 +86,9 @@ function createEnv() {
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k in props ? props[k] : null), setProperty: (k, v) => { props[k] = String(v); } }) },
     CacheService: { getScriptCache: () => ({
       get: k => { const e = cache[k]; return e && e.exp > state.now ? e.v : null; },
-      put: (k, v, sec) => { cache[k] = { v: String(v), exp: state.now + sec * 1000 }; },
-      remove: k => { delete cache[k]; } }) },
+      put: (k, v, sec) => { if (String(v).length > 100000) throw new Error('Argument too large'); cache[k] = { v: String(v), exp: state.now + (sec || 600) * 1000 }; },
+      remove: k => { delete cache[k]; },
+      getAll: ks => { const o = {}; ks.forEach(k => { const e = cache[k]; if (e && e.exp > state.now) o[k] = e.v; }); return o; } }) },
     Utilities: {
       getUuid: () => crypto.randomUUID(), formatDate: fmtDate,
       DigestAlgorithm: { SHA_256: 'SHA_256' }, Charset: { UTF_8: 'UTF_8' },

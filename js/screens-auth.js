@@ -9,13 +9,13 @@
       var urlNick = (new URLSearchParams(location.search).get('u') || '').trim();
       var saved = urlNick || u.store.get('lz.nick') || '', editing = !saved;
       function draw() {
-        root.innerHTML = '<div class="scr"><div class="hero">' + ui.logo('dark') + '<div class="pill">' + esc(S.store) + '</div><p>파크골프 방향 기록장</p></div><div class="bd nt">' +
+        root.innerHTML = '<div class="scr"><div class="hero">' + ui.themeBtn() + ui.logo('light') + '<div class="pill">' + esc(S.store) + '</div><p>파크골프 방향 기록장</p></div><div class="bd nt">' +
           (p.msg ? '<div class="ban b">' + esc(p.msg) + '</div>' : '') +
           (editing ? '<label class="lbl" for="nick">닉네임</label><input class="inp" id="nick" value="' + esc(saved) + '" autocomplete="username" autocapitalize="none" maxlength="8" placeholder="운영자가 알려 준 닉네임">'
             : '<div class="row2" style="margin:14px 0 4px"><div style="font-size:20px"><b>' + esc(saved) + '</b>님</div><button class="sm" id="other" type="button">다른 닉네임</button></div>') +
           '<label class="lbl c">비밀번호 숫자 4자리를 눌러 주세요</label><div id="kp"></div><div class="msg" id="err" role="alert" style="text-align:center"></div>' +
           '<button class="btn" id="go" type="button" style="margin-top:6px">로그인</button><p class="hint" style="text-align:center">비밀번호를 잊으셨나요? 운영자에게 말씀해 주세요.</p>' +
-          (P.standalone() ? '' : '<p class="hint" style="text-align:center"><a href="#" id="howto" style="color:#2D3760">홈 화면에 추가하는 방법</a></p>') + '</div></div>';
+          (P.standalone() ? '' : '<p class="hint" style="text-align:center"><a href="#" id="howto" style="color:var(--rt)">홈 화면에 추가하는 방법</a></p>') + '</div></div>';
         var kp = ui.keypad($('#kp'), 4, function () { $('#err').textContent = ''; });
         var other = $('#other'); if (other) other.onclick = function () { editing = true; saved = ''; draw(); var n = $('#nick'); if (n) n.focus(); };
         var how = $('#howto'); if (how) how.onclick = function (e) { e.preventDefault(); LZ.go('install', { from: 'login' }); };
@@ -46,8 +46,8 @@
   LZ.screens.pin = {
     show: function (p, root) {
       var step = 1, first = '';
-      root.innerHTML = '<div class="scr">' + (p.first ? '<div class="hero" style="padding-bottom:18px">' + ui.logo('dark') + '<p style="font-size:22px;color:#fff;margin-top:4px">처음 오셨네요</p></div>' : ui.hdr2('비밀번호 바꾸기')) +
-        '<div class="bd nt"><p class="hint" id="pinS" style="font-size:18px;text-align:center;margin:8px 0 0;color:#111A39">나만 아는 숫자 4자리를 정해 주세요</p><div id="kp"></div><div class="msg" id="err" role="alert" style="text-align:center"></div>' +
+      root.innerHTML = '<div class="scr">' + (p.first ? '<div class="hero" style="padding-bottom:18px">' + ui.logo('light') + '<p style="font-size:22px;color:var(--ink);margin-top:4px">처음 오셨네요</p></div>' : ui.hdr2('비밀번호 바꾸기')) +
+        '<div class="bd nt"><p class="hint" id="pinS" style="font-size:18px;text-align:center;margin:8px 0 0;color:var(--ink)">나만 아는 숫자 4자리를 정해 주세요</p><div id="kp"></div><div class="msg" id="err" role="alert" style="text-align:center"></div>' +
         '<p class="hint" style="text-align:center">1234, 0000 같은 쉬운 번호는 쓸 수 없어요.</p></div></div>';
       var kp = ui.keypad($('#kp'), 4, async function (v) {
         if (v.length < 4) return;
@@ -87,7 +87,7 @@
         return h;
       }
       function draw() {
-        root.innerHTML = '<div class="scr">' + (p.first ? '<div class="hero" style="padding-bottom:18px">' + ui.logo('dark') + '<p style="font-size:22px;color:#fff;margin-top:4px">홈 화면에 추가해 두세요</p></div>' : ui.hdr2('홈 화면에 추가')) +
+        root.innerHTML = '<div class="scr">' + (p.first ? '<div class="hero" style="padding-bottom:18px">' + ui.logo('light') + '<p style="font-size:22px;color:var(--ink);margin-top:4px">홈 화면에 추가해 두세요</p></div>' : ui.hdr2('홈 화면에 추가')) +
           '<div class="bd nt"><p style="font-size:17px;line-height:1.7;margin:4px 0 14px">휴대폰 바탕화면에 아이콘을 만들어 두면 앱처럼 바로 열 수 있어요.</p>' + body() +
           '<div style="display:grid;gap:8px;margin-top:14px"><button class="btn g" id="done">' + (p.first || p.from === 'login' ? '건너뛰고 계속하기' : '닫기') + '</button>' + (p.first ? '<button class="btn g" id="never">다시 보지 않기</button>' : '') + '</div></div></div>';
         var ext = $('#ext'); if (ext) ext.onclick = function () { if (!P.openExternal()) ui.toast('오른쪽 위(또는 아래) ⋯ 메뉴에서 "다른 브라우저로 열기"를 눌러 주세요.', 6000); };

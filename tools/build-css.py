@@ -1,10 +1,11 @@
-import re,sys
-src=open('tools/app.src.css',encoding='utf-8').read()
+# tools/app.src.css(px) → css/app.css(rem). 글씨 크기 조절이 모든 크기에 함께 적용되도록 합니다.
+import re
+src = open('tools/app.src.css', encoding='utf-8').read()
 def conv(m):
-    v=float(m.group(1))
-    if v<=2: return m.group(0)          # 1px 같은 가는 선은 그대로
-    r=round(v/16,4)
-    return (('%g'%r)+'rem')
-out=re.sub(r'(?<![\w.#-])(-?\d+(?:\.\d+)?)px',lambda m:conv(m) if not m.group(1).startswith('-') else '-'+conv(re.match(r'(\d+(?:\.\d+)?)',m.group(1)[1:])) ,src)
-open('css/app.css','w',encoding='utf-8').write(out)
-print('css',len(out))
+    sign, num = m.group(1), m.group(2)
+    v = float(num)
+    if v <= 2: return sign + num + 'px'          # 1px·2px 같은 가는 선과 작은 어긋남은 그대로
+    return sign + ('%g' % round(v / 16, 4)) + 'rem'
+out = re.sub(r'(?<![\w.#-])(-?)(\d+(?:\.\d+)?)px', conv, src)
+open('css/app.css', 'w', encoding='utf-8').write(out)
+print('css', len(out))

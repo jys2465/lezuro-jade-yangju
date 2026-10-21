@@ -10,12 +10,12 @@
     host.innerHTML = '<div class="recui' + (o.cmp ? ' cmp' : '') + '"><div class="sbox" data-sent aria-live="polite"></div>' +
       '<div class="l2"><span>기준을 하나 고르세요</span></div>' +
       '<div class="refs"><button type="button" data-ref="f">최초화면</button><button type="button" data-ref="c">홀컵</button><button type="button" data-ref="u">내가 정한 곳</button></div>' +
-      '<div data-un style="display:none"><div class="l2"><span>이름을 적어 주세요</span></div><input class="inp" data-name maxlength="10" placeholder="예: 오른쪽 나무" aria-label="내가 정한 곳 이름"><div class="qn">' +
+      '<div data-un style="display:none"><div class="l2"><span>이름을 적어 주세요</span></div><input class="inp" data-name maxlength="10" placeholder="예: 우측 나무" aria-label="내가 정한 곳 이름"><div class="qn">' +
       ['나무', '깃대', '벤치', '표지판', '벙커'].map(function (n) { return '<button type="button" class="sm" data-qn="' + n + '">' + n + '</button>'; }).join('') + '</div></div>' +
-      '<div class="l2"><span>방향과 칸 수</span></div><div class="lr"><button type="button" class="L" data-d="L">왼쪽</button><button type="button" class="R" data-d="R">오른쪽</button></div>' +
+      '<div class="l2"><span>방향과 칸 수</span></div><div class="lr"><button type="button" class="L" data-d="L">좌측</button><button type="button" class="R" data-d="R">우측</button></div>' +
       '<div class="stepper"><button type="button" data-s="-1" aria-label="한 칸 줄이기">−</button><output aria-live="polite">0</output><button type="button" data-s="1" aria-label="한 칸 늘리기">+</button><span>칸</span></div>' +
       '<div class="hint" style="margin:0 0 4px;text-align:center">0칸이면 "그대로"로 기록돼요</div>' +
-      '<div class="l2"><span>타격감</span><button type="button" class="lnk" data-pclear>지우기</button></div>' +
+      '<div class="l2"><span>타격감 (17 = 50M, 1마다 5M)</span><button type="button" class="lnk" data-pclear>17로 되돌리기</button></div>' +
       '<div class="stepper" data-pw><button type="button" data-ps="-1" aria-label="타격감 줄이기">−</button><input class="pin" data-pin type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" autocomplete="off" placeholder="17" aria-label="타격감 숫자 직접 입력"><button type="button" data-ps="1" aria-label="타격감 늘리기">+</button></div>' +
       '<div class="hint" data-pm style="margin:0 0 4px;text-align:center"></div>' +
       '<div class="l2"><span>참고사항</span><span data-cnt>0/20</span></div><input class="inp" data-note maxlength="20" placeholder="예: 바람 약, 살짝 짧게" aria-label="참고사항"></div>';
@@ -28,9 +28,10 @@
       $$('[data-d]', host).forEach(function (b) { b.classList.toggle('on', !!rec.n && b.dataset.d === rec.d); });
       q('.lr').classList.toggle('dim', !rec.n);
       q('.stepper output').textContent = rec.n;
-      var pi = q('[data-pin]'); if (document.activeElement !== pi) pi.value = rec.p ? String(rec.p) : '';
-      q('[data-pm]').innerHTML = rec.p ? '<b style="font-size:1.25em;color:#111A39">' + rec.p + '(' + u.pwM(rec.p) + 'M) 정도</b>' : '아직 정하지 않았어요. +를 누르면 17(50M)부터 시작해요.';
-      q('[data-pclear]').style.visibility = rec.p ? 'visible' : 'hidden';
+      var pi = q('[data-pin]'); if (document.activeElement !== pi) pi.value = String(rec.p >= 8 && rec.p <= 40 ? rec.p : u.PW0);
+      if (!(rec.p >= 8 && rec.p <= 40)) rec.p = u.PW0;
+      q('[data-pm]').innerHTML = '<b style="font-size:1.25em;color:var(--ink)">' + rec.p + '(' + u.pwM(rec.p) + 'M) 정도</b>' + (rec.p === u.PW0 ? ' <span style="color:var(--mut)">(기본값)</span>' : '');
+      q('[data-pclear]').style.visibility = rec.p !== u.PW0 ? 'visible' : 'hidden';
       q('[data-cnt]').textContent = (rec.o || '').length + '/20';
     }
     function ch() { upd(); if (o.onChange) o.onChange(rec); }
@@ -52,8 +53,8 @@
       b.addEventListener('click', function (e) { if (e.detail === 0) step(); });                                                                                       // 키보드로 누를 때
     }
     $$('[data-s]', host).forEach(function (b) { var d = +b.dataset.s; bindStep(b, function () { rec.n = Math.max(0, Math.min(30, rec.n + d)); }); });
-    $$('[data-ps]', host).forEach(function (b) { var d = +b.dataset.ps; bindStep(b, function () { rec.p = rec.p ? Math.max(8, Math.min(40, rec.p + d)) : 17; }); });
-    q('[data-pclear]').onclick = function () { if (dis) return blocked(); rec.p = 0; q('[data-pin]').value = ''; ch(); };
+    $$('[data-ps]', host).forEach(function (b) { var d = +b.dataset.ps; bindStep(b, function () { rec.p = Math.max(8, Math.min(40, (rec.p || u.PW0) + d)); }); });
+    q('[data-pclear]').onclick = function () { if (dis) return blocked(); rec.p = u.PW0; q('[data-pin]').value = String(u.PW0); ch(); };
     /* 타격감 숫자 직접 입력(8~40). 고르는 즉시 "20(65M) 정도"로 보여 줌 */
     var pin = q('[data-pin]');
     if (dis) pin.disabled = true;
@@ -61,12 +62,12 @@
     pin.addEventListener('input', function () {
       var v = pin.value.replace(/\D/g, '').slice(0, 2); if (v !== pin.value) pin.value = v;
       var pm = q('[data-pm]');
-      if (!v) { rec.p = 0; ch(); return; }
+      if (!v) { pm.innerHTML = '<span style="color:var(--mut)">숫자를 넣어 주세요. 비워 두면 17로 저장돼요.</span>'; return; }
       var n = +v;
       if (n >= 8 && n <= 40) { rec.p = n; ch(); }
-      else pm.innerHTML = '<span style="color:#A50D17">8부터 40까지 넣어 주세요. (17 = 50M, 1마다 5M)</span>';
+      else pm.innerHTML = '<span style="color:var(--rt)">8부터 40까지 넣어 주세요. (17 = 50M, 1마다 5M)</span>';
     });
-    pin.addEventListener('blur', function () { pin.value = rec.p ? String(rec.p) : ''; upd(); });
+    pin.addEventListener('blur', function () { pin.value = String(rec.p || u.PW0); upd(); });
     pin.addEventListener('keydown', function (e) { if (e.key === 'Enter') pin.blur(); });
     upd();
   };

@@ -25,7 +25,7 @@ function start(opts = {}) {
     const f = path.join(ROOT, p);
     if (!f.startsWith(ROOT) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) { res.writeHead(404); return res.end('nf'); }
     let data = fs.readFileSync(f);
-    if (p === '/js/config.js') data = Buffer.from(`window.LZ_CONFIG={API:'http://localhost:8802/exec'};`);
+    if (p === '/js/config.js') data = Buffer.from(`window.LZ_CONFIG={API:'http://localhost:8802/exec',BRANCH:'yangju'};`);
     res.writeHead(200, { 'Content-Type': MIME[path.extname(f)] || 'application/octet-stream', 'Cache-Control': 'no-cache' }); res.end(data);
   });
   return new Promise(r => api.listen(8802, () => stat.listen(8801, () => r({ env, pin, log, close: () => { api.close(); stat.close(); } }))));

@@ -1,11 +1,11 @@
 /* 서비스 워커 — 앱 껍데기를 기기에 저장해서 더 빨리 열리게 합니다.
  * ★ 파일을 고쳐 GitHub 에 올릴 때마다 아래 VERSION 숫자를 올리세요. (모든 기기가 새 버전으로 바뀝니다) */
-const VERSION = '1.0.0-1';
+const VERSION = '2.0.0-3';
 const CACHE = 'lezuro-' + VERSION;
 const SHELL = [
   './', 'index.html', 'manifest.json', 'css/app.css',
   'js/config.js', 'js/util.js', 'js/api.js', 'js/pwa.js', 'js/ui.js', 'js/rec.js',
-  'js/screens-auth.js', 'js/screens-courses.js', 'js/screens-holes.js', 'js/screens-admin.js', 'js/app.js',
+  'js/screens-auth.js', 'js/screens-courses.js', 'js/screens-holes.js', 'js/screens-pay.js', 'js/screens-admin.js', 'js/app.js', 'vendor/qrcode.js',
   'assets/logo-dark.png', 'assets/logo-light.png', 'assets/nosleep.mp4', 'assets/nosleep.webm', 'assets/fonts/NotoSansKR-Regular.woff2', 'assets/fonts/NotoSansKR-Medium.woff2',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-32.png'
 ];

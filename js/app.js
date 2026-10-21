@@ -37,7 +37,8 @@
     var cur = LZ.stack[LZ.stack.length - 1], s = LZ.screens[cur.name], root = $('#app'), my = ++tokenSeq;
     var alive = function () { return my === tokenSeq; };                 // 더 새 화면이 열렸으면 false
     var boot = $('#boot'); if (boot && boot.parentNode) boot.parentNode.removeChild(boot);
-    root.hidden = false; window.scrollTo(0, 0); LZ.wake.off();
+    root.hidden = false; window.scrollTo(0, 0);
+    if (s.wake) LZ.wake.on(); else LZ.wake.off();                        // 코스 화면(표·홀 편집·비교)에서는 화면이 꺼지지 않게
     try { await s.show(cur.p || {}, root, alive); }
     catch (e) {
       if (!alive()) return;
@@ -49,6 +50,8 @@
   }
   /* 공통 단추: 뒤로(←), 아래 메뉴 */
   document.addEventListener('click', function (e) {
+    var th = e.target.closest('[data-thm]');
+    if (th) { e.preventDefault(); LZ.theme.toggle(); return; }
     var b = e.target.closest('[data-back]');
     if (b) { e.preventDefault(); if (LZ.stack.length > 1) history.back(); else LZ.go('courses', {}, { reset: true }); return; }
     var t = e.target.closest('[data-tab]');
@@ -86,6 +89,15 @@
     await LZ.go('courses', {}, { reset: true });
     LZ.installHint();
   };
+  /* 내 등급·기간·결제 상태를 서버에서 다시 받음(결제 승인 뒤 바로 반영되도록) */
+  LZ.refreshMe = async function () {
+    try {
+      var me = await LZ.api('me', {}, { retry: 0 });
+      var was = S.user ? S.user.kind + S.user.st + S.user.end : '';
+      S.user = Object.assign({}, S.user, me.user); S.me = { pay: me.pay, pending: me.pending };
+      return was !== S.user.kind + S.user.st + S.user.end;
+    } catch (e) { return false; }
+  };
   LZ.onAuthLost = function (msg) {
     S.token = null; S.user = null; u.store.del('lz.t'); LZ.cache = {};
     LZ.guard = null;
@@ -108,7 +120,7 @@
     ui.busy(true, '로그아웃 중이에요…');
     try { await LZ.api('logout', {}, { retry: 0, timeout: 8000 }); } catch (e) { /* 서버에 못 알려도 이 폰에서는 로그아웃 */ }
     ui.busy(false);
-    S.token = null; S.user = null; u.store.del('lz.t'); LZ.cache = {}; LZ.rec.reset();
+    S.token = null; S.user = null; S.me = null; u.store.del('lz.t'); LZ.cache = {}; LZ.rec.reset();
     await LZ.go('login', { msg: '로그아웃했어요.' }, { reset: true });
   };
   /* 홈 화면에 추가 안내(처음 한 번, 이후 일주일에 한 번까지) */
@@ -125,7 +137,7 @@
   /* ───── 시작 ───── */
   function applyCfg(d) { if (d.store) S.store = d.store; if (d.logos) { if (d.logos.dark) S.logos.dark = d.logos.dark; if (d.logos.light) S.logos.light = d.logos.light; } }
   async function boot() {
-    LZ.applyFontSize();
+    LZ.applyFontSize(); LZ.theme.apply();
     LZ.pwa.registerSW(function (apply) {
       ui.dialog({ title: '새 버전이 있어요', body: '앱을 새 버전으로 바꿀게요. 잠깐 화면이 다시 열려요.', cancel: false, buttons: [{ label: '지금 바꾸기', kind: 'y', value: true }, { label: '나중에', kind: 'g', value: false }] }).then(function (v) { if (v) apply(); });
     });
@@ -152,7 +164,7 @@
       LZ.api('logout', {}, { retry: 0, timeout: 5000 }).catch(function () {}); S.token = null; u.store.del('lz.t'); u.store.del('lz.pend');
     }
     if (S.token) {
-      try { var me = await LZ.api('me', {}); S.store = me.store || S.store; await LZ.afterLogin(me.user); return; }
+      try { var me = await LZ.api('me', {}); S.store = me.store || S.store; S.me = { pay: me.pay, pending: me.pending }; await LZ.afterLogin(me.user); return; }
       catch (e) {
         if (e && e.code !== 'auth') { LZ.screens.fatal(e); return; }       // 인터넷 문제 등: 로그아웃시키지 않고 다시 시도 안내
         S.token = null; u.store.del('lz.t');
