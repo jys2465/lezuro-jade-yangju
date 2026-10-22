@@ -1,6 +1,6 @@
 /* 서비스 워커 — 앱 껍데기를 기기에 저장해서 더 빨리 열리게 합니다.
  * ★ 파일을 고쳐 GitHub 에 올릴 때마다 아래 VERSION 숫자를 올리세요. (모든 기기가 새 버전으로 바뀝니다) */
-const VERSION = '3.1.1';
+const VERSION = '3.1.2';
 const CACHE = 'lezuro-' + VERSION;
 const SHELL = [
   './', 'index.html', 'manifest.json', 'css/app.css',
@@ -26,7 +26,7 @@ self.addEventListener('activate', function (e) {
 self.addEventListener('message', function (e) { if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting(); });
 async function swr(req) {
   const cache = await caches.open(CACHE), hit = await cache.match(req, { ignoreSearch: true });
-  const net = fetch(req).then(function (res) { if (res && res.ok) cache.put(req, res.clone()); return res; }).catch(function () { return null; });
+  const net = fetch(req, { cache: 'no-cache' }).then(function (res) { if (res && res.ok) cache.put(req, res.clone()); return res; }).catch(function () { return null; });
   if (hit) { net.catch(function () {}); return hit; }
   const res = await net;
   if (res) return res;

@@ -43,13 +43,21 @@
     if (!('serviceWorker' in navigator) || !/^https:|^http:\/\/(localhost|127\.0\.0\.1)/.test(location.protocol + '//' + location.hostname)) return;
     var had = !!navigator.serviceWorker.controller, reloaded = false;
     navigator.serviceWorker.addEventListener('controllerchange', function () { if (reloaded || !had) return; reloaded = true; location.reload(); });
-    navigator.serviceWorker.register('sw.js').then(function (reg) {
-      function offer(w) { onUpdate && onUpdate(function () { w.postMessage({ type: 'SKIP_WAITING' }); }); }
+    var t0 = Date.now();
+    /* 새 버전: 앱을 막 열었을 때(20초 안·아직 아무것도 고치지 않음) 찾으면 묻지 않고 바로 바꿈. 쓰는 도중에 찾으면 "새 버전이 있어요"로 물어봄 */
+    function early() { return Date.now() - t0 < 20000 && !(LZ.rec && LZ.rec.dirty()) && !(LZ.guard && LZ.guard.dirty && LZ.guard.dirty()); }
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(function (reg) {
+      function offer(w) {
+        var go = function () { w.postMessage({ type: 'SKIP_WAITING' }); };
+        if (early()) go(); else if (onUpdate) onUpdate(go);
+      }
       if (reg.waiting && navigator.serviceWorker.controller) offer(reg.waiting);
       reg.addEventListener('updatefound', function () {
         var w = reg.installing; if (!w) return;
         w.addEventListener('statechange', function () { if (w.state === 'installed' && navigator.serviceWorker.controller) offer(w); });
       });
+      reg.update().catch(function () { /* 오프라인 */ });                   // 열 때마다 새 버전 확인
+      document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') reg.update().catch(function () {}); });   // 다시 열 때도 확인
       setInterval(function () { reg.update().catch(function () { /* 오프라인 */ }); }, 3600000);
     }).catch(function (e) { console.warn('서비스 워커 등록 실패', e); });
   };
