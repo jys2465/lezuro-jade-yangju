@@ -8,29 +8,34 @@
     show: function (p, root) {
       var urlNick = (new URLSearchParams(location.search).get('u') || '').trim();
       var saved = urlNick || u.store.get('lz.nick') || '', editing = !saved;
+      var plen = u.store.get('lz.plen') === '6' && (!urlNick || urlNick === u.store.get('lz.nick')) ? 6 : 4;   // 운영진은 6자리
       function draw() {
-        root.innerHTML = '<div class="scr"><div class="hero">' + ui.themeBtn() + ui.logo('light') + '<div class="pill">' + esc(S.store) + '</div><p>파크골프 방향 기록장</p></div><div class="bd nt">' +
+        root.innerHTML = '<div class="scr"><div class="hero">' + ui.themeBtn() + ui.logo() + (S.store ? '<div class="pill">📍 ' + esc(S.store) + '</div>' : '') + '<p>스크린 파크골프 홀별 공략 기록</p></div><div class="bd nt">' +
           (p.msg ? '<div class="ban b">' + esc(p.msg) + '</div>' : '') +
-          (editing ? '<label class="lbl" for="nick">닉네임</label><input class="inp" id="nick" value="' + esc(saved) + '" autocomplete="username" autocapitalize="none" maxlength="8" placeholder="운영자가 알려 준 닉네임">'
+          (editing ? '<label class="lbl" for="nick">닉네임</label><input class="inp" id="nick" value="' + esc(saved) + '" autocomplete="username" autocapitalize="none" maxlength="8" placeholder="닉네임">'
             : '<div class="row2" style="margin:14px 0 4px"><div style="font-size:20px"><b>' + esc(saved) + '</b>님</div><button class="sm" id="other" type="button">다른 닉네임</button></div>') +
-          '<label class="lbl c">비밀번호 숫자 4자리를 눌러 주세요</label><div id="kp"></div><div class="msg" id="err" role="alert" style="text-align:center"></div>' +
+          '<label class="lbl c" id="kpl">비밀번호 숫자 ' + plen + '자리를 눌러 주세요</label><div id="kp"></div><p class="hint" style="text-align:center;margin:0"><a href="#" id="plen" style="color:var(--mut)">' + (plen === 6 ? '4자리 비밀번호로 들어가기' : '운영자·관리자(6자리) 비밀번호로 들어가기') + '</a></p><div class="msg" id="err" role="alert" style="text-align:center"></div>' +
           '<button class="btn" id="go" type="button" style="margin-top:6px">로그인</button><p class="hint" style="text-align:center">비밀번호를 잊으셨나요? 운영자에게 말씀해 주세요.</p>' +
-          (P.standalone() ? '' : '<p class="hint" style="text-align:center"><a href="#" id="howto" style="color:var(--rt)">홈 화면에 추가하는 방법</a></p>') + '</div></div>';
-        var kp = ui.keypad($('#kp'), 4, function () { $('#err').textContent = ''; });
+          (P.standalone() ? '' : '<p class="hint" style="text-align:center"><a href="#" id="howto" style="color:var(--rt)">홈 화면에 추가하는 방법</a></p>') +
+          (S.join && S.join.on ? '<div class="joinbox"><div class="t">처음이세요?</div><button class="btn y" id="join" type="button">' + (S.join.trialDays || 5) + '일 무료 체험 시작하기</button><ul class="jfeat"><li>홀별 방향·칸 수·타격감 기록</li><li>같은 매장 회원 기록 참고·비교</li><li>결제 없이 바로 시작, 1분이면 가입</li></ul></div>' : '') + '</div></div>';
+        var kp = ui.keypad($('#kp'), plen, function () { $('#err').textContent = ''; });
+        $('#plen').onclick = function (e) { e.preventDefault(); plen = plen === 6 ? 4 : 6; var nv = editing && $('#nick') ? $('#nick').value : null; draw(); if (nv !== null && $('#nick')) $('#nick').value = nv; };
         var other = $('#other'); if (other) other.onclick = function () { editing = true; saved = ''; draw(); var n = $('#nick'); if (n) n.focus(); };
         var how = $('#howto'); if (how) how.onclick = function (e) { e.preventDefault(); LZ.go('install', { from: 'login' }); };
+        var jn = $('#join'); if (jn) jn.onclick = function () { LZ.go('join', {}); };
         async function submit() {
           var nick = editing ? $('#nick').value.trim() : saved, err = $('#err');
           if (!nick) { err.textContent = '닉네임을 적어 주세요.'; return; }
-          if (kp.value.length < 4) { err.textContent = '비밀번호 숫자 4자리를 눌러 주세요.'; return; }
+          if (kp.value.length < plen) { err.textContent = '비밀번호 숫자 ' + plen + '자리를 눌러 주세요.'; return; }
           $('#go').disabled = true; ui.busy(true, '확인하고 있어요…');
           try {
             var r = await LZ.api('login', { nick: nick, pin: kp.value, dev: P.device }, { noAuth: true, retry: 0 });
             S.token = r.token; u.store.set('lz.t', r.token); ui.busy(false);
+            if (r.branches) S.branches = r.branches;
             await LZ.afterLogin(r.user);
           } catch (e) {
             ui.busy(false); var b = $('#go'); if (b) b.disabled = false;
-            if ($('#err')) $('#err').textContent = ui.errText(e); kp.reset(); if ($('#err')) $('#err').textContent = ui.errText(e);
+            u.buzz('err'); if ($('#err')) $('#err').textContent = ui.errText(e); kp.reset(); if ($('#err')) $('#err').textContent = ui.errText(e);
           }
         }
         $('#go').onclick = submit;
@@ -42,29 +47,39 @@
   };
 
   /* ───── 비밀번호 정하기(처음 로그인할 때 반드시, 설정에서도 가능) ───── */
-  var WEAK = ['0123', '1234', '2345', '3456', '4567', '5678', '6789', '9876', '8765', '7654', '6543', '5432', '4321', '3210', '0000'];
+  /* 쉬운 번호: 같은 숫자 반복, 1234·4321 같은 연속, 6자리는 121212 같은 반복도 */
+  LZ.weakPin = function (v) {
+    if (/^(\d)\1+$/.test(v)) return true;
+    var up = true, dn = true;
+    for (var i = 1; i < v.length; i++) { var d = (+v[i]) - (+v[i - 1]); if (d !== 1 && d !== -9) up = false; if (d !== -1 && d !== 9) dn = false; }
+    if (up || dn) return true;
+    if (v.length === 6 && (/^(\d\d)\1\1$/.test(v) || /^(\d{3})\1$/.test(v))) return true;
+    return false;
+  };
   LZ.screens.pin = {
     show: function (p, root) {
-      var step = 1, first = '';
-      root.innerHTML = '<div class="scr">' + (p.first ? '<div class="hero" style="padding-bottom:18px">' + ui.logo('light') + '<p style="font-size:22px;color:var(--ink);margin-top:4px">처음 오셨네요</p></div>' : ui.hdr2('비밀번호 바꾸기')) +
-        '<div class="bd nt"><p class="hint" id="pinS" style="font-size:18px;text-align:center;margin:8px 0 0;color:var(--ink)">나만 아는 숫자 4자리를 정해 주세요</p><div id="kp"></div><div class="msg" id="err" role="alert" style="text-align:center"></div>' +
-        '<p class="hint" style="text-align:center">1234, 0000 같은 쉬운 번호는 쓸 수 없어요.</p></div></div>';
-      var kp = ui.keypad($('#kp'), 4, async function (v) {
-        if (v.length < 4) return;
+      var step = 1, first = '', len = (S.user && S.user.pinLen) || 4, ask = '나만 아는 숫자 ' + len + '자리를 정해 주세요';
+      root.innerHTML = '<div class="scr">' + (p.first ? '<div class="hero" style="padding-bottom:18px">' + ui.logo() + '<p style="font-size:22px;color:var(--ink);margin-top:4px">' + (len === 6 ? '운영진 비밀번호 6자리를 정해 주세요' : '처음 오셨네요') + '</p></div>' : ui.hdr2('비밀번호 바꾸기')) +
+        '<div class="bd nt"><p class="hint" id="pinS" style="font-size:18px;text-align:center;margin:8px 0 0;color:var(--ink)">' + ask + '</p><div id="kp"></div><div class="msg" id="err" role="alert" style="text-align:center"></div>' +
+        '<p class="hint" style="text-align:center">' + (len === 6 ? '운영자·관리자는 회원 정보를 다루니 6자리를 써요. ' : '') + '1234, 0000 같은 쉬운 번호는 쓸 수 없어요.</p>' +
+        (p.first ? '' : '<label class="chk" style="justify-content:center"><input type="checkbox" id="others"> 다른 휴대폰은 모두 로그아웃</label>') + '</div></div>';
+      var kp = ui.keypad($('#kp'), len, async function (v) {
+        if (v.length < len) return;
         var err = $('#err'); err.textContent = '';
         if (step === 1) {
-          if (WEAK.indexOf(v) >= 0 || /^(\d)\1{3}$/.test(v)) { err.textContent = '너무 쉬운 번호예요. 다른 숫자로 정해 주세요.'; kp.reset(); return; }
+          if (LZ.weakPin(v)) { u.buzz('err'); err.textContent = '너무 쉬운 번호예요. 다른 숫자로 정해 주세요.'; kp.reset(); return; }
           first = v; step = 2; $('#pinS').textContent = '확인을 위해 한 번 더 눌러 주세요'; kp.reset(); return;
         }
-        if (v !== first) { step = 1; first = ''; $('#pinS').textContent = '숫자가 달라요. 처음부터 다시 정해 주세요'; kp.reset(); return; }
+        if (v !== first) { u.buzz('err'); step = 1; first = ''; $('#pinS').textContent = '숫자가 달라요. 처음부터 다시 정해 주세요'; kp.reset(); return; }
         ui.busy(true, '저장하고 있어요…');
         try {
-          var r = await LZ.api('pin', { pin: v }, { retry: 0 }); ui.busy(false);
-          S.user = r.user; ui.toast('비밀번호가 바뀌었어요. 다음부터는 이 숫자로 들어오세요.', 4500);
-          if (p.first && !P.standalone() && u.store.get('lz.hintOff') !== '1') await LZ.go('install', { first: true }, { reset: true });
-          else if (p.first) await LZ.go('courses', {}, { reset: true });
+          var ot = $('#others'), r = await LZ.api('pin', { pin: v, others: ot && ot.checked ? 1 : 0 }, { retry: 0 }); ui.busy(false);
+          S.user = Object.assign({}, S.user, r.user); u.store.set('lz.plen', String(len));
+          ui.toast('비밀번호가 바뀌었어요. 다음부터는 이 숫자로 들어오세요.', 4500);
+          if (p.first && !P.standalone() && u.store.get('lz.hintOff') !== '1' && !ui.isStaff()) await LZ.go('install', { first: true }, { reset: true });
+          else if (p.first) await LZ.go(ui.isStaff() ? 'dash' : 'courses', {}, { reset: true });
           else history.back();
-        } catch (e) { ui.busy(false); step = 1; first = ''; $('#pinS').textContent = '나만 아는 숫자 4자리를 정해 주세요'; $('#err').textContent = ui.errText(e); kp.reset(); }
+        } catch (e) { ui.busy(false); step = 1; first = ''; $('#pinS').textContent = ask; $('#err').textContent = ui.errText(e); kp.reset(); }
       });
     }
   };
@@ -87,7 +102,7 @@
         return h;
       }
       function draw() {
-        root.innerHTML = '<div class="scr">' + (p.first ? '<div class="hero" style="padding-bottom:18px">' + ui.logo('light') + '<p style="font-size:22px;color:var(--ink);margin-top:4px">홈 화면에 추가해 두세요</p></div>' : ui.hdr2('홈 화면에 추가')) +
+        root.innerHTML = '<div class="scr">' + (p.first ? '<div class="hero" style="padding-bottom:18px">' + ui.logo() + '<p style="font-size:22px;color:var(--ink);margin-top:4px">홈 화면에 추가해 두세요</p></div>' : ui.hdr2('홈 화면에 추가')) +
           '<div class="bd nt"><p style="font-size:17px;line-height:1.7;margin:4px 0 14px">휴대폰 바탕화면에 아이콘을 만들어 두면 앱처럼 바로 열 수 있어요.</p>' + body() +
           '<div style="display:grid;gap:8px;margin-top:14px"><button class="btn g" id="done">' + (p.first || p.from === 'login' ? '건너뛰고 계속하기' : '닫기') + '</button>' + (p.first ? '<button class="btn g" id="never">다시 보지 않기</button>' : '') + '</div></div></div>';
         var ext = $('#ext'); if (ext) ext.onclick = function () { if (!P.openExternal()) ui.toast('오른쪽 위(또는 아래) ⋯ 메뉴에서 "다른 브라우저로 열기"를 눌러 주세요.', 6000); };
@@ -105,7 +120,7 @@
     return new Promise(function (resolve) {
       var b = $('#boot'); if (b && b.parentNode) b.parentNode.removeChild(b);
       var ov = document.createElement('div'); ov.className = 'ov'; ov.setAttribute('role', 'dialog');
-      ov.innerHTML = '<img src="assets/logo-light.png" alt="레저로 스크린 파크골프"><h2>' + (kind === 'kakao' ? '카카오톡' : '다른 앱') + ' 안에서 열렸어요</h2>' +
+      ov.innerHTML = LZ.ui.logo() + '<h2>' + (kind === 'kakao' ? '카카오톡' : '다른 앱') + ' 안에서 열렸어요</h2>' +
         '<p>휴대폰 <b>기본 브라우저</b>(크롬·삼성 인터넷·사파리)로 열어야 홈 화면에 추가할 수 있고, 로그인도 오래 유지돼요.</p>' +
         '<button class="btn y" id="gx" style="margin-bottom:10px">기본 브라우저로 열기</button><button class="btn g" id="gc">그냥 여기서 쓸게요</button>' +
         '<p class="hint" style="margin-top:14px">버튼을 눌러도 열리지 않으면 화면 오른쪽 위(또는 아래) ⋯ 메뉴에서 "다른 브라우저로 열기" 또는 "Safari로 열기"를 눌러 주세요.</p>';

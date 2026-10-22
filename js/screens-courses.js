@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var LZ = window.LZ, u = LZ.u, ui = LZ.ui, $ = u.$, $$ = u.$$, esc = u.esc, S = LZ.S;
-  function draftKey(stage, id) { return 'lz.draft.' + (S.user ? S.user.nick : '') + '.' + stage + (id ? '.' + id : ''); }
+  function draftKey(stage, id) { return 'lz.draft.' + (S.user ? S.user.uid || S.user.nick : '') + '.' + stage + (id ? '.' + id : ''); }
   var okM = function (v) { return /^\d{1,3}(\.\d)?$/.test(v) && parseFloat(v) > 0; };
   function blank9() { return { par: Array(9).fill(null), m: Array(9).fill(''), rec: Array.from({ length: 9 }, u.emptyRec), on: Array(9).fill(false) }; }
 
@@ -10,17 +10,18 @@
   LZ.screens.courses = {
     show: async function (p, root, alive) {
       var data = LZ.cache.courses || null, canReg = LZ.cache.canReg, q = '';
+      if (LZ.cache.coursesBr !== LZ.branch) data = null;                                   // 지점을 바꾸면 새로 받음
       function list() {
         var key = u.key(q), l = data.filter(function (c) { return !key || u.key(c.name).indexOf(key) >= 0; });
         $('#cnt').textContent = key ? '"' + q + '" 검색 결과 ' + l.length + '곳' : '등록된 코스 ' + data.filter(function (c) { return c.stage === 'done'; }).length + '곳';
-        var ex = ui.expired();
+        var ex = ui.expired(), homeNm = (S.user && S.user.homeName) || '기본 지점';
         $('#clist').innerHTML = l.map(function (c) {
           if (c.stage === 'front') {
             return '<div class="card" role="button" tabindex="0" data-id="' + esc(c.id) + '" data-front="1" style="border-color:var(--pri)"><div style="flex:1;min-width:0"><div class="t">' + esc(c.name) + '</div><div class="s">전반 9홀만 저장됨 · 나에게만 보여요</div><span class="chip r">후반 9홀 입력 필요</span></div><span style="font-size:24px;color:var(--mut2)" aria-hidden="true">›</span></div>';
           }
           var par = 0, m = 0; c.holes.forEach(function (h) { par += h[0]; m += h[1]; });
           return '<div class="card" role="button" tabindex="0" data-id="' + esc(c.id) + '"><div style="flex:1;min-width:0"><div class="t">' + esc(c.name) + '</div><div class="s">18홀 · 파 ' + par + ' · 총 ' + u.fmt(m) + 'm</div>' +
-            '<span class="chip ' + (c.mine ? 'y' : '') + '">내 기록 ' + c.mine + '/18홀</span>' + (!ex ? ' <span class="chip">다른 회원 ' + c.others + '명</span>' : '') + '</div><span style="font-size:24px;color:var(--mut2)" aria-hidden="true">›</span></div>';
+            '<span class="chip ' + (c.mine ? 'y' : '') + '">내 기록 ' + c.mine + '/18홀</span>' + (!c.mine && c.homeMine ? ' <span class="chip ref" title="기본 지점 기록">' + esc(homeNm) + ' ' + c.homeMine + '홀</span>' : '') + (!ex ? ' <span class="chip">다른 회원 ' + c.others + '명</span>' : '') + '</div><span style="font-size:24px;color:var(--mut2)" aria-hidden="true">›</span></div>';
         }).join('') || '<div class="ann">' + (data.length ? '찾는 코스가 없어요. ' + (canReg ? '스크린에 나오는 이름 그대로 아래 버튼으로 등록할 수 있어요.' : '월간·연간회원이 되면 직접 등록할 수 있어요.') : '아직 등록된 코스가 없어요. ' + (canReg ? '아래 버튼으로 첫 코스를 등록해 보세요.' : '')) + '</div>';
         $$('#clist .card').forEach(function (c) {
           function open() { if (c.dataset.front) LZ.go('regBack', { id: c.dataset.id }); else LZ.go('holes', { id: c.dataset.id }); }
@@ -46,7 +47,7 @@
         else if (!data) root.innerHTML = '<div class="scr">' + ui.hdr('코스') + '<div class="bd">' + ui.skeleton(4) + '</div>' + ui.tabs('courses') + '</div>';
         try {
           var both = await Promise.all([LZ.api('courses', {}), LZ.refreshMe()]);
-          if (!alive()) return; data = LZ.cache.courses = both[0].courses; canReg = LZ.cache.canReg = !!both[0].canReg; draw();
+          if (!alive()) return; data = LZ.cache.courses = both[0].courses; LZ.cache.coursesBr = LZ.branch; canReg = LZ.cache.canReg = !!both[0].canReg; draw();
           if (force) ui.toast('새로 불러왔어요', 1800);
         } catch (e) {
           if (!alive()) return;

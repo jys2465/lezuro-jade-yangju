@@ -17,38 +17,41 @@
   u.key = function (s) { return u.stripSpaces(s).toLowerCase(); };
   u.debounce = function (fn, ms) { var t; var f = function () { var a = arguments, c = this; clearTimeout(t); t = setTimeout(function () { fn.apply(c, a); }, ms); }; f.cancel = function () { clearTimeout(t); }; return f; };
 
-  /* ───── 지점: 화면(이 주소)은 하나, 서버·시트는 지점마다 따로 ─────
-   * 주소 끝의 ?s=지점코드 로 지점을 고르고, 폰이 마지막 지점을 기억합니다. 없으면 기본 지점(DEFAULT). */
+  /* ───── 통합 서버 하나 + 지점(서버 안의 칸) ─────
+   * 서버 주소는 하나(config.js 의 API). 지점은 서버가 알려 주고, 주소 끝의 ?s=지점코드 로 열거나 앱 위쪽 지점 이름을 눌러 바꿉니다. */
   LZ.configBroken = !window.LZ_CONFIG;                                           // config.js 에 쉼표·따옴표 실수가 있으면 파일 전체를 못 읽음
-  var C = window.LZ_CONFIG || {}, B = {}, clean = function (x) { return String(x || '').toLowerCase().replace(/[^a-z0-9]/g, ''); };
-  if (C.BRANCHES) for (var bk in C.BRANCHES) { if (clean(bk)) B[clean(bk)] = { code: clean(bk), name: C.BRANCHES[bk].name || '', API: C.BRANCHES[bk].API || '' }; }
-  else B[clean(C.BRANCH) || 'main'] = { code: clean(C.BRANCH) || 'main', name: '', API: C.API || '' };     // 예전 설정 모양(API·BRANCH 한 개)
-  LZ.branches = B; LZ.branchList = Object.keys(B); LZ.multiBranch = LZ.branchList.length > 1;
-  LZ.branchOn = !!(C.BRANCHES || C.BRANCH);                                          // 서버에 지점 코드를 함께 보낼지
-  var DEF = B[clean(C.DEFAULT)] ? clean(C.DEFAULT) : LZ.branchList[0];
-  LZ.ready = function (b) { return !!(B[b] && B[b].API && !/^YOUR_/.test(B[b].API)); };
+  var C = window.LZ_CONFIG || {}, clean = function (x) { return String(x || '').toLowerCase().replace(/[^a-z0-9]/g, ''); };
+  LZ.API = C.API || (function () {                                               // 예전 설정 모양(지점마다 주소)이면 기본 지점 주소를 씀
+    if (!C.BRANCHES) return '';
+    var d = C.BRANCHES[C.DEFAULT] || C.BRANCHES[Object.keys(C.BRANCHES)[0]] || {};
+    return d.API || '';
+  })();
+  LZ.ready = function () { return !!(LZ.API && !/^YOUR_/.test(LZ.API)); };
+  LZ.clean = clean;
   (function () {
     var q = clean(new URLSearchParams(location.search).get('s')), saved = null;
-    try { saved = clean(localStorage.getItem('lz.branch')); } catch (e) { /* 무시 */ }
-    LZ.branch = B[q] ? q : B[saved] ? saved : DEF;
-    try { localStorage.setItem('lz.branch', LZ.branch); } catch (e) { /* 무시 */ }
+    try { saved = clean(localStorage.getItem('lz.br')) || clean(localStorage.getItem('lz.branch')); } catch (e) { /* 무시 */ }
+    LZ.branch = q || saved || '';                                                // 비어 있으면 서버가 마지막 지점·기본 지점으로 정해 줌
+    LZ.branchFromUrl = !!q;
   })();
-  LZ.branchCfg = B[LZ.branch];
-  LZ.switchBranch = function (code) {
-    try { localStorage.setItem('lz.branch', code); } catch (e) { /* 무시 */ }
-    location.href = location.pathname + '?s=' + encodeURIComponent(code);
+  LZ.setBranch = function (code, name) {
+    LZ.branch = code || ''; if (name && LZ.S) LZ.S.store = name;
+    try { localStorage.setItem('lz.br', LZ.branch); } catch (e) { /* 무시 */ }
   };
-  /* 기기 저장소(실패해도 앱이 멈추지 않게).
-   * 로그인·기록·임시 저장 같은 값은 지점마다 따로 보관하고("lz@지점코드."), 화면 모드·글씨 크기처럼 폰 전체 설정은 함께 씀 */
-  var SHARED = /^lz\.(theme|fs|hintOff|hintAt|installed|inappOk|branch)$/;
-  function nk(k, b) { return /^lz\./.test(k) && !SHARED.test(k) ? 'lz@' + (b || LZ.branch) + '.' + k.slice(3) : k; }
-  try {                                                                          // 예전 버전(지점 코드 없음)에 남은 값은 기본 지점 것으로 옮김
-    if (!localStorage.getItem('lz@' + DEF + '.moved')) {
-      for (var i = localStorage.length - 1; i >= 0; i--) {
-        var k0 = localStorage.key(i);
-        if (k0 && /^lz\./.test(k0) && !SHARED.test(k0) && localStorage.getItem(nk(k0, DEF)) === null) localStorage.setItem(nk(k0, DEF), localStorage.getItem(k0));
-      }
-      localStorage.setItem('lz@' + DEF + '.moved', '1');
+  /* 기기 저장소(실패해도 앱이 멈추지 않게). 앱 것은 "lz@app." 아래에 모아 두고, 화면 모드·글씨 크기·지점은 폰 전체 설정 */
+  var SHARED = /^lz\.(theme|fs|hintOff|hintAt|installed|inappOk|branch|br|dev|ref|buzz)$/, NS = 'lz@app.';
+  function nk(k) { return /^lz\./.test(k) && !SHARED.test(k) ? NS + k.slice(3) : k; }
+  try {                                                                          // 예전 버전 값(lz.○○, 지점별 lz@yangju.○○)을 옮겨 와서 로그인 유지
+    if (!localStorage.getItem(NS + 'moved')) {
+      var olds = [];
+      for (var i = localStorage.length - 1; i >= 0; i--) { var k0 = localStorage.key(i); if (k0) olds.push(k0); }
+      olds.forEach(function (k0) {
+        var m = /^lz@([a-z0-9]+)\.(.+)$/.exec(k0), rest = m ? m[2] : (/^lz\./.test(k0) && !SHARED.test(k0) ? k0.slice(3) : null);
+        if (!rest || (m && m[1] === 'app')) return;
+        if (m && m[1] !== 'yangju' && localStorage.getItem(NS + rest) !== null) return;          // 양주점 값을 먼저
+        if (localStorage.getItem(NS + rest) === null || (m && m[1] === 'yangju')) localStorage.setItem(NS + rest, localStorage.getItem(k0));
+      });
+      localStorage.setItem(NS + 'moved', '1');
     }
   } catch (e) { /* 무시 */ }
   u.store = {
@@ -58,6 +61,43 @@
     getJSON: function (k) { try { return JSON.parse(u.store.get(k)); } catch (e) { return null; } },
     setJSON: function (k, v) { return u.store.set(k, JSON.stringify(v)); }
   };
+  /* 누를 때 짧은 진동(설정에서 끌 수 있음)
+   * 안드로이드: 진동. 아이폰은 진동 기능을 열어 주지 않아서, iOS 18 이상에서 되는 "스위치 누름 느낌"을 대신 써요(손가락으로 누를 때만). */
+  var iosSw = null;
+  function iosTap() {
+    try {
+      if (!iosSw) {
+        var lb = document.createElement('label'), cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.setAttribute('switch', ''); cb.tabIndex = -1; cb.setAttribute('aria-hidden', 'true');
+        lb.appendChild(cb); lb.setAttribute('aria-hidden', 'true');
+        lb.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
+        document.body.appendChild(lb); iosSw = lb;
+      }
+      iosSw.click();
+    } catch (e) { /* 무시 */ }
+  }
+  u.buzzOn = function () { return u.store.get('lz.buzz') !== '0'; };
+  u.buzz = function (kind) {
+    if (!u.buzzOn()) return;
+    var pat = kind === 'err' ? [40, 60, 40] : kind === 'edge' ? 35 : kind === 'ok' ? [15, 40, 15] : 12;
+    if (navigator.vibrate) { try { navigator.vibrate(pat); } catch (e) { /* 무시 */ } return; }
+    if (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) { iosTap(); if (kind === 'err' || kind === 'ok') setTimeout(iosTap, 120); }
+  };
+  /* 이 휴대폰 번호(직접 가입 1인 1회 확인용, 개인정보 아님) · 초대 링크의 추천 코드(?r=) */
+  LZ.devId = function () {
+    var d = u.store.get('lz.dev');
+    if (!/^[a-f0-9]{32}$/.test(d || '')) {
+      var a = new Uint8Array(16); try { crypto.getRandomValues(a); } catch (e) { for (var i = 0; i < 16; i++) a[i] = Math.floor(Math.random() * 256); }
+      d = Array.prototype.map.call(a, function (x) { return (x < 16 ? '0' : '') + x.toString(16); }).join(''); u.store.set('lz.dev', d);
+    }
+    return d;
+  };
+  (function () {
+    var qs = new URLSearchParams(location.search), r = qs.get('r');
+    if (r && /^u\d{1,9}$/.test(r)) u.store.set('lz.ref', r);
+    LZ.wantJoin = qs.get('join') === '1';
+  })();
+
 
   /* 기록 한 칸: r=기준(f 최초화면, c 홀컵, u 내가 정한 곳) t=이름 d=방향(L/R) n=칸 o=참고사항 */
   u.PW0 = 17;                                                                                       // 타격감 기본값(17 = 50M)
@@ -83,6 +123,9 @@
   u.md = function (d) { if (!d) return ''; var a = String(d).split('-'); return (+a[1]) + '월 ' + (+a[2]) + '일'; };
   u.ymd = function (d) { if (!d) return ''; var a = String(d).split('-'); return a[0] + '. ' + (+a[1]) + '. ' + (+a[2]) + '.'; };
   u.period = function (s, e) { return s && e ? u.ymd(s) + ' ~ ' + u.ymd(e) : ''; };
+  u.fmtDate = function (ts) { if (!ts) return ''; var d = new Date(+ts); return (d.getMonth() + 1) + '월 ' + d.getDate() + '일'; };
+  u.fmtDT = function (ts) { if (!ts) return ''; var d = new Date(+ts), p = function (n) { return (n < 10 ? '0' : '') + n; }; return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); };
+  u.today = function () { var d = new Date(), p = function (n) { return (n < 10 ? '0' : '') + n; }; return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); };
   u.won = function (n) { return (Number(n) || 0).toLocaleString('ko-KR') + '원'; };
   u.ago = function (ts) {
     if (!ts) return '접속 기록 없음';

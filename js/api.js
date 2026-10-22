@@ -8,10 +8,10 @@
   LZ.ApiError = ApiError;
 
   function post(a, body, o) {
-    var url = LZ.branchCfg && LZ.branchCfg.API;
+    var url = LZ.API;
     if (!url || /^YOUR_/.test(url)) return Promise.reject(new ApiError('config', '서버 주소가 아직 설정되지 않았어요.\n개발자에게 js/config.js 를 확인해 달라고 해 주세요.'));
     var payload = {}; for (var k in (body || {})) payload[k] = body[k];
-    payload.a = a; if (LZ.branchOn) payload.b = LZ.branch;   // 지점 코드: 서버가 다른 지점 주소면 거절
+    payload.a = a; if (LZ.branch && payload.br === undefined) payload.br = LZ.branch;   // 지금 지점(서버가 없는 지점이면 거절)
     if (LZ.S && LZ.S.token && !o.noAuth) payload.t = LZ.S.token;
     var ctl = window.AbortController ? new AbortController() : null, timer = ctl ? setTimeout(function () { ctl.abort(); }, o.timeout || 40000) : null;
     /* 사전요청(OPTIONS)이 생기지 않도록 text/plain 으로 보냄 */
@@ -20,7 +20,7 @@
       .then(function (txt) {
         var d;
         try { d = JSON.parse(txt); } catch (e) { throw new ApiError('server', '서버 응답을 읽을 수 없어요.\n개발자에게 앱스크립트 배포 설정(액세스: 모든 사용자)을 확인해 달라고 해 주세요.'); }
-        if (d && d.ok) return d;
+        if (d && d.ok) { if (d.br && d.store && /^(me|courses|course|useBranch)$/.test(a)) LZ.setBranch(d.br, d.store); return d; }   // 서버가 정한 지점으로 맞춤
         throw new ApiError((d && d.err) || 'server', (d && d.msg) || '서버에 문제가 생겼어요. 잠시 뒤에 다시 해 주세요.', d);
       });
   }
@@ -32,7 +32,7 @@
     var ov = document.createElement('div'); ov.className = 'qwait'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-live', 'polite');
     function paint(d) {
       d = d || {};
-      ov.innerHTML = '<img src="' + u.esc(LZ.S.logos.light) + '" alt="레저로 스크린 파크골프"><h2 style="font-size:20px;margin-bottom:6px">지금 이용하는 분이 많아요</h2>' +
+      ov.innerHTML = LZ.ui.logo() + '<h2 style="font-size:20px;margin-bottom:6px">지금 이용하는 분이 많아요</h2>' +
         '<p>내 앞에 기다리는 분</p><div class="n">' + (d.ahead || 0) + '명</div>' +
         '<p>자리가 나면 자동으로 들어가요. 이 화면을 켜 둔 채로 잠시만 기다려 주세요.' + (d.waiting ? '<br><span style="font-size:14px;color:var(--mut)">전체 대기 ' + d.waiting + '명</span>' : '') + '</p>' +
         '<div class="spin" style="margin:10px auto 0"></div>';
@@ -62,7 +62,9 @@
       return post(a, body, o).catch(function (e) {
         if (e && e.code === 'net' && left > 0) return u.sleep(1200).then(function () { return run(left - 1); });
         if (e && e.code === 'queue' && !o.noQueue) return LZ.queueWait(e.data).then(function () { return run(left); });
+        if (e && e.code === 'branch' && LZ.branch && !o._brRetry && !(body && body.br)) { LZ.setBranch(''); o._brRetry = true; return run(left); }   // 없어진 지점을 기억하고 있으면 서버가 정해 준 지점으로
         if (e && e.code === 'auth' && LZ.S && LZ.S.token && LZ.onAuthLost && !o.noAuth) LZ.onAuthLost(e.message);
+        if (e && e.code === 'must' && LZ.go && LZ.stack && LZ.stack.length && LZ.stack[LZ.stack.length - 1].name !== 'pin') LZ.go('pin', { first: true }, { reset: true, skipGuard: true });
         throw e;
       });
     }

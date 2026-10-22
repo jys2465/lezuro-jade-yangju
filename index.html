@@ -3,52 +3,34 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>레저로 파크골프 방향 기록장</title>
-<meta name="description" content="레저로 스크린 파크골프 회원을 위한 코스별 방향 기록장">
+<title>파크골프 공략노트</title>
+<meta name="description" content="스크린 파크골프 홀별 공략(방향·타격감) 기록과 공유">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob: data:; connect-src 'self' https://script.google.com https://script.googleusercontent.com https://*.googleusercontent.com; manifest-src 'self'; worker-src 'self'; base-uri 'self'; form-action 'none'; object-src 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<!-- 카카오톡·문자 미리보기 카드 (og:url·og:image 는 README 대로 내 GitHub 주소로 바꾸면 더 확실해요) -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="파크골프 공략노트">
+<meta property="og:title" content="파크골프 공략노트 · 5일 무료 체험">
+<meta property="og:description" content="스크린 파크골프 홀별 공략(기준·방향·칸 수·타격감)을 기록하고 같은 매장 회원 기록도 참고해요.">
+<meta property="og:image" content="assets/og-card.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#FFFFFF">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="apple-mobile-web-app-title" content="파크골프기록">
+<meta name="apple-mobile-web-app-title" content="공략노트">
 <meta name="format-detection" content="telephone=no">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icons/favicon-32.png">
 <link rel="preload" href="assets/fonts/NotoSansKR-Regular.woff2" as="font" type="font/woff2" crossorigin>
-<script>
-/* 화면 모드(밝게·어둡게)를 그리기 전에 먼저 정함 — 하얗게 번쩍이지 않게 */
-(function () {
-  var m; try { m = localStorage.getItem('lz.theme'); } catch (e) { m = null; }
-  var d = m === 'dark' || (m !== 'light' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
-  document.documentElement.dataset.theme = d ? 'dark' : 'light';
-  var t = document.querySelector('meta[name="theme-color"]'); if (t) t.content = d ? '#17191E' : '#FFFFFF';
-})();
-</script>
+<script src="js/pre.js"></script>
 <link rel="stylesheet" href="css/app.css">
-<script>
-/* 시작 감시: 6초 안에 앱이 시작하지 못하면 이유를 화면에 알려 줍니다 */
-(function () {
-  var failed = [], errs = [];
-  window.addEventListener('error', function (e) {
-    var t = e.target;
-    if (t && t !== window && (t.src || t.href)) failed.push((t.src || t.href).replace(location.origin, ''));
-    else if (e.message) errs.push(e.message);
-  }, true);
-  window.addEventListener('unhandledrejection', function (e) { errs.push(String((e.reason && e.reason.message) || e.reason)); });
-  setTimeout(function () {
-    if (window.LZ && window.LZ.booted) return;
-    var el = document.getElementById('boot'); if (!el) return;
-    var h = '<h2>앱을 시작하지 못했어요</h2><p>';
-    if (failed.length) h += '불러오지 못한 파일 ' + failed.length + '개:<br><b>' + failed.slice(0, 6).join('<br>') + '</b><br><br>GitHub 저장소에 css, js, assets, icons 폴더와 그 안의 파일이 모두 올라갔는지 확인해 주세요.';
-    else if (errs.length) h += '오류: <b>' + String(errs[0]).replace(/[<>&]/g, '') + '</b>';
-    else h += '시작이 늦어지고 있어요. 인터넷이 느린지 확인하고 다시 시도해 주세요.';
-    el.innerHTML = h + '</p><button class="btn" style="max-width:260px" onclick="location.reload()">다시 시도</button>';
-  }, 6000);
-})();
-</script>
 </head>
 <body>
-<div id="boot" class="boot"><img src="assets/logo-light.png" alt="레저로 스크린 파크골프" width="200" height="100"><div class="spin" aria-hidden="true"></div><p>불러오는 중…</p></div>
+<div id="boot" class="boot"><img src="assets/logo-light.png" alt="파크골프 공략노트" width="200" height="100"><div class="spin" aria-hidden="true"></div><p>불러오는 중…</p></div>
 <div id="app" hidden></div>
 <div id="layer"></div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -63,7 +45,10 @@
 <script defer src="js/screens-courses.js"></script>
 <script defer src="js/screens-holes.js"></script>
 <script defer src="js/screens-pay.js"></script>
+<script defer src="js/screens-qna.js"></script>
 <script defer src="js/screens-admin.js"></script>
+<script defer src="js/screens-v3.js"></script>
+<script defer src="js/screens-join.js"></script>
 <script defer src="js/app.js"></script>
 </body>
 </html>

@@ -8,17 +8,23 @@
   /* ───── 코스 목록 위의 안내 띠 ───── */
   LZ.memberBanner = function () {
     var us = S.user, me = S.me || {}, pend = me.pending, h = '';
-    if (!us || ui.isStaff(us)) return '';
+    if (!us) return '';
+    var nu = LZ.noticeUnread ? LZ.noticeUnread() : 0;
+    if (nu) { var sn = u.store.getJSON('lz.ntSeen') || {}, nf = (me.notices || []).filter(function (n) { return sn[n.id] !== n.upd; })[0]; h += '<button type="button" class="ntb" data-nt>📢 새 공지 ' + nu + '건' + (nf ? ' · ' + esc(nf.title) : '') + ' ›</button>'; }
+    if (me.qnaOn && me.qna > 0 && !ui.isStaff(us)) h += '<div class="ban b">운영진 답변이 도착했어요 (' + me.qna + '건). <button class="sm" data-qna type="button" style="margin-top:6px">문의 보기</button></div>';
+    if (ui.isStaff(us)) return h;
     var per = u.period(us.start, us.end);
     if (pend) h += '<div class="ban b">입금 확인을 기다리고 있어요 (' + esc(pend.planName) + ' ' + u.won(pend.amount) + '). 관리자가 확인하면 바로 이용이 시작돼요. <button class="sm" data-pay type="button" style="margin-top:6px">결제 상태 보기</button></div>';
-    if (us.st === 'expired') return h + (pend ? '' : '<div class="ban r"><b>' + esc(us.kindName || '') + ' 기간이 끝났어요</b> (' + per + ')<br>지금은 내 기록 읽기만 할 수 있어요. 다른 회원 기록은 볼 수 없어요.<br><button class="btn" data-pay type="button" style="margin-top:8px;min-height:48px">이용권 결제하기</button></div>');
-    if (us.kind === 'trial') return h + (pend ? '' : '<div class="ban"><b>체험회원</b> · ' + (us.left > 0 ? us.left + '일 남음' : '오늘까지') + ' (' + per + ')<br>체험 중에 결제하면 확인 즉시 이용권이 시작돼요.<br><button class="btn" data-pay type="button" style="margin-top:8px;min-height:48px">이용권 결제하기</button></div>');
+    if (us.st === 'expired') return h + (pend ? '' : '<div class="ban r"><b>' + esc(us.kindName || '') + ' 기간이 끝났어요</b> (' + per + ')<br>지금은 로그인해서 내 기록을 보는 것만 할 수 있어요. 기록 쓰기·고치기·가져오기, 다른 회원 기록 보기, 코스 등록은 결제하면 다시 돼요.<br><button class="btn" data-pay type="button" style="margin-top:8px;min-height:48px">이용권 결제하기</button></div>');
+    if (us.kind === 'trial') return h + (pend ? '' : '<div class="ban' + (us.left <= 2 ? ' r' : '') + '"><b>' + (us.left <= 2 ? '체험이 곧 끝나요' : '체험회원') + '</b> · ' + (us.left > 0 ? 'D-' + us.left : '오늘까지') + ' (' + per + ')<br>' + (us.left <= 2 ? '지금 결제하면 기록을 계속 쓰고 다른 회원 기록도 계속 볼 수 있어요.' : '체험 중에 결제하면 확인 즉시 이용권이 시작돼요.') + '<br><button class="btn" data-pay type="button" style="margin-top:8px;min-height:48px">이용권 결제하기</button></div>');
     if (me.pay && me.pay.ok && !pend) return h + '<div class="ban"><b>' + esc(us.kindName) + '</b> · ' + u.dday(us.left) + ' (' + per + ')<br>지금 연장하면 끝나는 날 다음 날부터 이어서 시작돼요. <button class="sm" data-pay type="button" style="margin-top:6px">연장 결제</button></div>';
     return h + '<div class="hint" style="margin:0 2px 10px">' + esc(us.kindName) + ' · ' + per + ' (' + u.dday(us.left) + ')</div>';
   };
   LZ.bindMemberBanner = function (root) {
     $$('[data-pay]', root).forEach(function (b) { b.onclick = function () { LZ.go('pay', {}); }; });
+    $$('[data-nt]', root).forEach(function (b) { b.onclick = function () { LZ.go('notices', {}); }; });
     $$('[data-trust]', root).forEach(function (b) { b.onclick = function () { LZ.go('trust', {}); }; });
+    $$('[data-qna]', root).forEach(function (b) { b.onclick = function () { LZ.go('qna', { tab: 'list', fromSettings: !ui.isStaff() }); }; });
   };
   /* 내 기록 신뢰도: 다른 회원이 내 기록을 가져다 쓴 수(코스마다 1점) */
   LZ.trustChip = function () {
@@ -29,16 +35,16 @@
   /* ───── 신뢰도 목록: 언제(가장 최근), 누가, 어느 코스 ───── */
   LZ.screens.trust = {
     show: async function (p, root, alive) {
-      var other = p.nick && p.nick !== S.user.nick, title = other ? p.nick + '님 신뢰도' : '내 기록 신뢰도';
+      var other = (p.uid && p.uid !== S.user.uid) || (p.nick && p.nick !== S.user.nick), title = other ? p.nick + '님 신뢰도' : '내 기록 신뢰도';
       root.innerHTML = '<div class="scr">' + ui.hdr2(title) + '<div class="bd nt">' + ui.skeleton(3) + '</div></div>';
-      var d = await LZ.api('trust', other ? { nick: p.nick } : {}); if (!alive()) return;
+      var d = await LZ.api('trust', other ? (p.uid ? { uid: p.uid } : { nick: p.nick }) : {}); if (!alive()) return;
       if (!other) S.me = Object.assign({}, S.me, { trust: d.trust });
       function when(ts) { var x = new Date(ts); return x.getFullYear() + '. ' + (x.getMonth() + 1) + '. ' + x.getDate() + '. ' + String(x.getHours()).padStart(2, '0') + ':' + String(x.getMinutes()).padStart(2, '0'); }
       root.innerHTML = '<div class="scr">' + ui.hdr2(title) + '<div class="bd nt">' +
         '<div class="sumg" style="grid-template-columns:1fr"><div><b style="font-size:36px;color:var(--pri)">' + d.trust + '점</b>' + (other ? esc(d.nick) + '님 기록을 가져다 쓴 수' : '다른 회원이 내 기록을 가져다 쓴 수') + '</div></div>' +
-        '<p class="hint" style="margin:0 0 10px">한 회원이 한 코스에서 가져다 쓰면 1점이에요. 같은 코스를 여러 번 가져가도 1점이고, 날짜만 가장 최근으로 바뀌어요. 최근 순으로 보여요.</p>' +
+        '<p class="hint" style="margin:0 0 10px">모든 지점 점수를 합친 거예요. 한 회원이 한 지점·한 코스에서 가져다 쓰면 1점이에요. 같은 코스를 여러 번 가져가도 1점이고, 날짜만 가장 최근으로 바뀌어요. 최근 순으로 보여요.</p>' +
         (d.list.map(function (x) {
-          return '<div class="paybox" role="button" tabindex="0" data-c="' + esc(x.cid) + '" style="cursor:pointer"><div class="t">' + esc(x.course) + '</div><div class="meta"><b>' + esc(x.user) + '님</b>이 가져다 썼어요 · ' + when(x.at) + (x.first !== x.at ? ' (처음 ' + when(x.first).slice(0, -6) + ')' : '') + '</div></div>';
+          return '<div class="paybox" role="button" tabindex="0" data-c="' + esc(x.cid) + '" style="cursor:pointer"><div class="t">' + esc(x.course) + '<span class="brtag">' + esc(x.store) + '</span></div><div class="meta"><b>' + esc(x.user) + '님</b>이 가져다 썼어요 · ' + when(x.at) + (x.first !== x.at ? ' (처음 ' + when(x.first).slice(0, -6) + ')' : '') + '</div></div>';
         }).join('') || '<div class="ann">아직 없어요. 코스에 기록을 남기고 공개해 두면, 다른 회원이 가져다 쓸 때마다 올라가요.</div>') + '</div></div>';
       $$('[data-c]', root).forEach(function (b) { b.onclick = function () { if (b.dataset.c && !/지워진/.test(b.innerText)) LZ.go('holes', { id: b.dataset.c }); }; });
     }

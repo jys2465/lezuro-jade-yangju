@@ -61,6 +61,7 @@ class Sheet {
 }
 class Spreadsheet {
   constructor() { this.sheets = []; this.tz = 'Asia/Seoul'; }
+  getId() { return 'ss1'; }
   getSheetByName(n) { return this.sheets.find(s => s.name === n) || null; }
   insertSheet(n) { if (this.getSheetByName(n)) throw new Error('sheet exists ' + n); const s = new Sheet(this, n); this.sheets.push(s); return s; }
   deleteSheet(s) { this.sheets = this.sheets.filter(x => x !== s); }
@@ -88,14 +89,19 @@ function createEnv(opts) {
       get: k => { const e = cache[k]; return e && e.exp > state.now ? e.v : null; },
       put: (k, v, sec) => { if (String(v).length > 100000) throw new Error('Argument too large'); cache[k] = { v: String(v), exp: state.now + (sec || 600) * 1000 }; },
       remove: k => { delete cache[k]; },
-      getAll: ks => { const o = {}; ks.forEach(k => { const e = cache[k]; if (e && e.exp > state.now) o[k] = e.v; }); return o; } }) },
+      getAll: ks => { const o = {}; ks.forEach(k => { const e = cache[k]; if (e && e.exp > state.now) o[k] = e.v; }); return o; },
+      putAll: (o, sec) => { Object.keys(o).forEach(k => { if (String(o[k]).length > 100000) throw new Error('Argument too large'); cache[k] = { v: String(o[k]), exp: state.now + (sec || 600) * 1000 }; }); } }) },
     Utilities: {
       getUuid: () => crypto.randomUUID(), formatDate: fmtDate,
       DigestAlgorithm: { SHA_256: 'SHA_256' }, Charset: { UTF_8: 'UTF_8' },
       computeDigest: (algo, s) => Array.from(crypto.createHash('sha256').update(String(s), 'utf8').digest()).map(b => (b > 127 ? b - 256 : b)) // 부호 있는 바이트
     },
     ContentService: { createTextOutput: s => ({ _s: s, setMimeType() { return this; }, getContent() { return this._s; } }), MimeType: { JSON: 'JSON' } },
-    ScriptApp: { getProjectTriggers: () => triggers.slice(), newTrigger: fn => { const ch = { timeBased: () => ch, everyDays: () => ch, atHour: () => ch, create: () => { const t = { getHandlerFunction: () => fn }; triggers.push(t); return t; } }; return ch; } },
+    ScriptApp: { WeekDay: { SUNDAY: 'SUNDAY' }, getProjectTriggers: () => triggers.slice(), newTrigger: fn => { const ch = { timeBased: () => ch, everyDays: () => ch, onWeekDay: () => ch, atHour: () => ch, create: () => { const t = { getHandlerFunction: () => fn }; triggers.push(t); return t; } }; return ch; } },
+    DriveApp: (() => { const files = [], folders = [];
+      const mkFolder = n => { const f = { name: n, getFiles: () => { const l = files.filter(x => x.folder === f && !x.trashed); let i = 0; return { hasNext: () => i < l.length, next: () => l[i++] }; } }; folders.push(f); return f; };
+      return { _files: files, getFoldersByName: n => { const l = folders.filter(f => f.name === n); let i = 0; return { hasNext: () => i < l.length, next: () => l[i++] }; }, createFolder: mkFolder,
+        getFileById: () => ({ makeCopy: (n, folder) => { const f = { n, folder, trashed: false, getName: () => n, setTrashed: v => { f.trashed = v; } }; files.push(f); return f; } }) }; })(),
     Session: { getScriptTimeZone: () => 'Asia/Seoul' }
   };
   vm.createContext(ctx);

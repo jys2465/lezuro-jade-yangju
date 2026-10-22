@@ -4,7 +4,7 @@
   var LZ = window.LZ, u = LZ.u, $ = u.$, esc = u.esc;
   var ui = LZ.ui = {};
   LZ.screens = LZ.screens || {};
-  LZ.S = LZ.S || { token: null, user: null, store: (LZ.branchCfg && LZ.branchCfg.name) || '제이드 양주점', logos: { dark: 'assets/logo-dark.png', light: 'assets/logo-light.png' } };
+  LZ.S = LZ.S || { token: null, user: null, store: '', logos: { dark: 'assets/logo-dark.png', light: 'assets/logo-light.png' } };
 
   var toastT;
   ui.toast = function (msg, ms) {
@@ -21,7 +21,7 @@
       div.innerHTML = '<div class="box"><h3>' + esc(o.title || '') + '</h3>' + (o.body ? '<p>' + esc(o.body) + '</p>' : '') + (o.html || '') + '<div class="btns">' +
         (o.buttons || [{ label: '확인', value: true }]).map(function (b, i) { return '<button class="btn ' + (b.kind || 'g') + '" data-i="' + i + '">' + esc(b.label) + '</button>'; }).join('') + '</div></div>';
       layer.appendChild(div);
-      function done(v) { if (div.parentNode) div.parentNode.removeChild(div); resolve(v); }
+      function done(v) { if (o.collect) { var inp = div.querySelector('input,select,textarea'); v = { v: v, val: inp ? inp.value : '' }; } if (div.parentNode) div.parentNode.removeChild(div); resolve(v); }
       div.addEventListener('click', function (e) {
         var b = e.target.closest('[data-i]');
         if (b) return done((o.buttons || [{ value: true }])[+b.dataset.i].value);
@@ -69,6 +69,7 @@
     apply: function () {
       var d = T.isDark(); document.documentElement.dataset.theme = d ? 'dark' : 'light';
       var meta = document.querySelector('meta[name="theme-color"]'); if (meta) meta.content = d ? '#17191E' : '#FFFFFF';
+      Array.prototype.forEach.call(document.querySelectorAll('img[data-logo]'), function (im) { im.src = ui.logoSrc(); });
       Array.prototype.forEach.call(document.querySelectorAll('[data-thm]'), function (b) { b.innerHTML = ui.themeIcon(); b.setAttribute('aria-label', d ? '밝은 화면으로 바꾸기' : '어두운 화면으로 바꾸기'); });
     },
     set: function (m) { if (m === 'auto') u.store.del('lz.theme'); else u.store.set('lz.theme', m); T.apply(); },
@@ -82,29 +83,42 @@
   };
   ui.themeBtn = function () { var d = T.isDark(); return '<button type="button" class="thm" data-thm aria-label="' + (d ? '밝은 화면으로 바꾸기' : '어두운 화면으로 바꾸기') + '">' + ui.themeIcon() + '</button>'; };
 
-  ui.logo = function (slot) { return '<img src="' + esc(LZ.S.logos[slot]) + '" alt="레저로 스크린 파크골프">'; };
+  /* 로고: 화면 모드에 맞는 그림(어두운 화면이면 dark) */
+  ui.logoSrc = function () { return LZ.S.logos[T.isDark() ? 'dark' : 'light'] || LZ.S.logos.light; };
+  ui.logo = function () { return '<img data-logo src="' + esc(ui.logoSrc()) + '" alt="파크골프 공략노트">'; };
+  /* 지점 띠: 모든 화면 위쪽에 지금 지점(누르면 지점 바꾸기) */
+  ui.band = function (sub) {
+    var nm = LZ.S.store || '지점';
+    return '<div class="store"><button type="button" class="brb" data-branch aria-label="지금 지점 ' + esc(nm) + ', 눌러서 지점 바꾸기"><b>📍 ' + esc(nm) + '</b><i aria-hidden="true">▾</i></button><span>' + esc(sub || '파크골프 공략노트') + '</span></div>';
+  };
   ui.hdr = function (sub) {
-    return '<header class="hd">' + ui.logo('light') + '<div class="rt"><div class="who">' + ui.tag(LZ.S.user) + '</div>' + ui.themeBtn() + '</div></header>' +
-      '<div class="store"><b>' + esc(LZ.S.store) + '</b><span>' + esc(sub || '') + '</span></div>';
+    return '<header class="hd">' + ui.logo() + '<div class="rt"><div class="who">' + ui.tag(LZ.S.user) + '</div>' + ui.themeBtn() + '</div></header>' + ui.band(sub);
   };
   /* 안쪽 화면 머리글: ← 버튼, 제목, 오른쪽 문구 */
   ui.hdr2 = function (title, right, noBack) {
     return '<header class="hd2">' + (noBack ? '<span style="width:12px"></span>' : '<button class="bk" data-back aria-label="뒤로">←</button>') +
-      '<span class="ttl">' + esc(title) + '</span>' + (right || '') + ui.themeBtn() + '<span style="width:6px"></span></header><div class="store cp"><b>' + esc(LZ.S.store) + '</b><span>레저로 스크린 파크골프</span></div>';
+      '<span class="ttl">' + esc(title) + '</span>' + (right || '') + ui.themeBtn() + '<span style="width:6px"></span></header>' + (LZ.S.user ? ui.band() : '');
   };
 
   var ICON = {
+    dash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V11M10 20V5M16 20v-7M22 20H2"/></svg>',
+    qna: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/><path d="M9 9.5h6M9 12.5h4"/></svg>',
     courses: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 21V3"/><path d="M7 4l10 3.5L7 11"/><ellipse cx="12" cy="21" rx="6" ry="1.4"/></svg>',
     members: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17" cy="9" r="2.4"/><path d="M17 14.5c2.5 0 4.5 1.6 4.5 4"/></svg>',
     settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></svg>'
   };
   ui.icon = function (n) { return ICON[n] || ''; };
   ui.tabs = function (cur) {
+    var me = LZ.S.me || {}, staff = ui.isStaff(), q = me.qnaOn && me.qna > 0 ? me.qna : 0, nt = LZ.noticeUnread ? LZ.noticeUnread() : 0;
     var list = [['courses', '코스']];
-    if (ui.isStaff()) list.push(['members', '회원']);
-    list.push(['settings', '설정']);
+    if (staff) list.push(['dash', '현황']);
+    if (staff) list.push(['members', '회원']);
+    if (staff && me.qnaOn) list.push(['qna', '문의']);                       // 운영진: 답할 문의 수
+    list.push(['settings', '설정']);                                         // 회원: 답변 온 문의 + 안 읽은 공지
     return '<nav class="tabs" aria-label="주 메뉴">' + list.map(function (x) {
-      return '<button data-tab="' + x[0] + '" class="' + (x[0] === cur ? 'on' : '') + '" ' + (x[0] === cur ? 'aria-current="page"' : '') + '>' + ICON[x[0]] + x[1] + '</button>';
+      var n = x[0] === 'qna' ? q : x[0] === 'settings' ? (staff ? 0 : q) + nt : 0;
+      var bd = n ? '<i class="bdg" aria-label="' + n + '건">' + (n > 99 ? '99+' : n) + '</i>' : '';
+      return '<button data-tab="' + x[0] + '" class="' + (x[0] === cur ? 'on' : '') + '" ' + (x[0] === cur ? 'aria-current="page"' : '') + '><span class="ti">' + ICON[x[0]] + bd + '</span>' + x[1] + '</button>';
     }).join('') + '</nav>';
   };
 
@@ -120,10 +134,11 @@
     host.addEventListener('click', function (e) {
       var b = e.target.closest('[data-k]'); if (!b) return;
       var k = b.dataset.k;
-      if (k === '지움') v = ''; else if (k === '←') v = v.slice(0, -1); else if (v.length < len) v += k;
+      if (k === '지움') v = ''; else if (k === '←') v = v.slice(0, -1); else if (v.length < len) v += k; else { u.buzz('edge'); return; }
+      u.buzz(v.length === len && k.length === 1 ? 'ok' : '');
       draw(); if (onChange) onChange(v);
     });
-    return { get value() { return v; }, reset: function () { v = ''; draw(); if (onChange) onChange(v); } };
+    return { get value() { return v; }, get len() { return len; }, reset: function () { v = ''; draw(); if (onChange) onChange(v); }, setLen: function (n) { len = n; v = v.slice(0, n); draw(); } };
   };
 
   /* 화면 꺼짐 방지 안내 띠 */

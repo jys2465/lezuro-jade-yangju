@@ -16,8 +16,8 @@
  * 주의: 회원이 거의 없는 시간(예: 새벽)에 실행하세요. 몇 분 걸리고, 구글의 하루 사용량을 조금 씁니다.
  */
 const [, , API, PIN, BRANCH_ARG, FLAG] = process.argv;
-if (!API || !/^https?:\/\//.test(API) || !/^\d{4}$/.test(PIN || '')) {
-  console.log('사용법: node tools/loadtest.js "<웹 앱 URL>" <관리자 비밀번호 4자리> [지점코드] [--apply]');
+if (!API || !/^https?:\/\//.test(API) || !/^\d{4,6}$/.test(PIN || '')) {
+  console.log('사용법: node tools/loadtest.js "<웹 앱 URL>" <관리자 비밀번호 6자리> [지점코드] [--apply]');
   process.exit(1);
 }
 const BRANCH = BRANCH_ARG && BRANCH_ARG !== '--apply' ? BRANCH_ARG : 'yangju';
@@ -27,7 +27,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const nick = i => 'lt' + String(i + 1).padStart(2, '0');
 
 async function call(a, body, t) {
-  const payload = Object.assign({}, body, { a, b: BRANCH }); if (t) payload.t = t;
+  const payload = Object.assign({}, body, { a, br: BRANCH }); if (t) payload.t = t;
   const t0 = Date.now();
   try {
     const res = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload), redirect: 'follow' });
@@ -40,7 +40,7 @@ function must(r, what) { if (!r.ok) { console.error('\n✗ ' + what + ' 실패: 
 const pct = (a, p) => { if (!a.length) return 0; const s = a.slice().sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(s.length * p))]; };
 
 (async () => {
-  console.log('\n[레저로 파크골프 부하 시험] ' + new Date().toLocaleString('ko-KR') + '  지점: ' + BRANCH);
+  console.log('\n[파크골프 공략노트 부하 시험] ' + new Date().toLocaleString('ko-KR') + '  지점: ' + BRANCH);
   const adm = must(await call('login', { nick: '관리자', pin: PIN, dev: 'loadtest' }), '관리자 로그인').token;
   const cfg = must(await call('adminCfg', {}, adm), '설정 읽기').cfg, oldSeats = cfg.seats;
   must(await call('setCfg', { seats: 0 }, adm), '좌석 제한 끄기');
@@ -59,6 +59,7 @@ const pct = (a, p) => { if (!a.length) return 0; const s = a.slice().sort((x, y)
     for (let i = 0; i < N; i++) {
       const c = must(await call('mCreate', { nick: nick(i), kind: 'trial' }, adm), nick(i) + ' 만들기');
       const l = must(await call('login', { nick: nick(i), pin: c.pin, dev: 'loadtest' }), nick(i) + ' 로그인');
+      must(await call('pin', { pin: '2580' }, l.token), nick(i) + ' 비밀번호 정하기');   // v3.1: 처음 비밀번호 그대로는 다른 기능이 막혀요
       accounts.push(l.token); if (i % 10 === 9) process.stdout.write(' ' + (i + 1));
     }
     console.log(' 끝');

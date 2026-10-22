@@ -78,52 +78,145 @@
     LZ.stack.pop(); await render();
   });
 
-  /* 개인 링크 뒤에 붙는 부분: 여러 지점이면 ?s=지점&u=닉네임 */
-  LZ.linkQuery = function (nick) { return '?' + (LZ.multiBranch ? 's=' + encodeURIComponent(LZ.branch) + '&' : '') + 'u=' + encodeURIComponent(nick); };
-  /* ───── 지점 바꾸기 (관리자만: 지점마다 관리자 계정이 따로라서 한 폰에서 오갈 때) ─────
-   * 회원·운영자는 지점을 고를 수 없어요. 운영자가 보낸 초대 링크(?s=지점)로 들어온 지점만 씁니다. */
+  /* 개인 링크 뒤에 붙는 부분: ?s=지점&u=닉네임 */
+  LZ.linkQuery = function (nick, br) { br = br || LZ.branch; return '?' + (br ? 's=' + encodeURIComponent(br) + '&' : '') + 'u=' + encodeURIComponent(nick); };
+  /* 지점 띠(📍 지점 ▾)를 누르면 지점 고르기 */
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-branch]'); if (!b || !S.user) return;
+    e.preventDefault(); if (LZ.stack[LZ.stack.length - 1].name !== 'branch') LZ.go('branch', {});
+  });
+  LZ.brName = function (code) { var l = S.branches || []; for (var i = 0; i < l.length; i++) if (l[i].code === code) return l[i].name; return code || ''; };
+
+  /* ───── 지점 바꾸기 ─────
+   * 지점마다 센서·파워가 달라서 기록은 지점마다 따로예요. 이용권·닉네임·신뢰도는 모든 지점 공통. */
+  LZ.switchBranch = async function (code, o) {
+    o = o || {};
+    if (LZ.rec.dirty()) { ui.busy(true, '저장하고 있어요…'); var ok = await LZ.rec.flush(); ui.busy(false); if (!ok) { ui.toast('저장하지 못한 기록이 있어요. 인터넷을 확인하고 다시 해 주세요.', 4500); return false; } }
+    var before = LZ.branch;
+    ui.busy(true, '지점을 바꾸고 있어요…');
+    try {
+      LZ.setBranch(code, LZ.brName(code));
+      var r = await LZ.api('useBranch', { br: code }, { retry: 1 });
+      LZ.setBranch(r.br, r.store);
+    } catch (e) { ui.busy(false); LZ.setBranch(before, LZ.brName(before)); ui.toast(ui.errText(e), 4500); return false; }
+    ui.busy(false);
+    LZ.cache = {}; LZ.guard = null;
+    try { history.replaceState(history.state, '', location.pathname + LZ.linkQuery(S.user.nick)); } catch (e) { /* 무시 */ }
+    LZ.refreshMe().then(function () { LZ.noticePopup(); });
+    if (!o.quiet) ui.toast('📍 ' + S.store + '(으)로 바꿨어요. 기록은 지점마다 따로예요.', 3500);
+    await LZ.go('courses', {}, { reset: true, skipGuard: true });
+    return true;
+  };
   LZ.screens.branch = {
     show: function (p, root) {
-      if (!ui.isAdmin()) { root.innerHTML = '<div class="bd nt"><div class="ban r">지점 바꾸기는 관리자만 할 수 있어요.</div></div>'; return; }
-      root.innerHTML = '<div class="scr">' + (LZ.stack.length > 1 ? ui.hdr2('지점 바꾸기') : '<div class="hero">' + ui.themeBtn() + ui.logo('light') + '<p>지점을 골라 주세요</p></div>') + '<div class="bd nt">' +
-        '<p class="hint" style="margin-top:0">지점마다 회원·기록·이용권이 따로예요. 다른 지점에서도 그 지점의 닉네임과 비밀번호로 들어가요.</p>' +
-        LZ.branchList.map(function (c) {
-          var br = LZ.branches[c], on = c === LZ.branch, ok = LZ.ready(c);
-          return '<button type="button" class="card" data-b="' + c + '" style="width:100%;text-align:left;' + (on ? 'border-color:var(--pri)' : '') + (ok ? '' : 'opacity:.5;cursor:default') + '"' + (ok ? '' : ' disabled') + '><div style="flex:1"><div class="t">' + u.esc(br.name || c) + '</div><div class="s">' + (on ? '지금 쓰는 지점' : ok ? '이 지점으로 바꾸기' : '준비 중이에요') + '</div></div>' + (on ? '<span class="chip r">지금</span>' : ok ? '<span style="font-size:24px;color:var(--mut2)">›</span>' : '') + '</button>';
-        }).join('') + '</div></div>';
-      Array.prototype.forEach.call(root.querySelectorAll('[data-b]'), function (b) {
+      var me = S.user || {}, list = S.branches || [], admin = ui.isAdmin(), op = me.kind === 'op';
+      var homeLine = op ? '운영자의 소속 지점은 관리자가 바꿔요.' : me.homeNext ? '기본 지점은 ' + u.fmtDate(me.homeNext) + '부터 다시 바꿀 수 있어요.' : '기본 지점은 30일에 한 번 바꿀 수 있어요.';
+      root.innerHTML = '<div class="scr">' + ui.hdr2('지점 고르기') + '<div class="bd nt">' +
+        '<div class="ban b" style="margin-top:0">지점마다 센서와 파워가 달라서 <b>기록은 지점마다 따로</b> 저장돼요. 이용권·닉네임·신뢰도는 모든 지점에서 같아요.</div>' +
+        list.map(function (b) {
+          var on = b.code === LZ.branch, home = b.code === me.home, closed = !b.active;
+          return '<div class="card" style="' + (on ? 'border-color:var(--pri);' : '') + (closed ? 'opacity:.6;' : '') + 'display:block">' +
+            '<button type="button" data-b="' + u.esc(b.code) + '" style="all:unset;display:flex;align-items:center;width:100%;cursor:pointer;min-height:48px">' +
+            '<div style="flex:1"><div class="t">' + u.esc(b.name) + (home ? ' <span class="chip g">기본 지점</span>' : '') + (closed ? ' <span class="chip">닫힘</span>' : '') + '</div>' +
+            '<div class="s">' + (on ? '지금 쓰는 지점' : '이 지점으로 바꾸기') + '</div></div>' + (on ? '<span class="chip r">지금</span>' : '<span style="font-size:24px;color:var(--mut2)">›</span>') + '</button>' +
+            (!home && !op && !closed ? '<button type="button" class="sm" data-home="' + u.esc(b.code) + '" style="margin-top:6px"' + (me.homeNext && !admin ? ' disabled' : '') + '>기본 지점으로 정하기</button>' : '') + '</div>';
+        }).join('') +
+        '<p class="hint">기본 지점: <b>' + u.esc(me.homeName || LZ.brName(me.home)) + '</b> · ' + homeLine + '<br>다른 지점에서는 기본 지점의 내 기록을 흐리게 보여 드리고, 가져올 수 있어요.</p>' +
+        '<p class="hint">찾는 지점이 없나요? ' + (S.me && S.me.qnaOn ? '<a href="#" id="ask" style="color:var(--rt)">지점 추가 요청</a>을 남겨 주세요.' : '운영자에게 말씀해 주세요.') + '</p></div></div>';
+      u.$$('[data-b]', root).forEach(function (b) {
+        b.onclick = function () { var c = b.dataset.b; if (c === LZ.branch) { history.back(); return; } LZ.switchBranch(c); };
+      });
+      u.$$('[data-home]', root).forEach(function (b) {
         b.onclick = async function () {
-          var c = b.dataset.b; if (c === LZ.branch) { if (LZ.stack.length > 1) history.back(); return; }
-          if (LZ.rec.dirty()) { ui.busy(true, '저장하고 있어요…'); var ok = await LZ.rec.flush(); ui.busy(false); if (!ok) { ui.toast('저장하지 못한 기록이 있어요. 인터넷을 확인하고 다시 해 주세요.', 4500); return; } }
-          LZ.guard = null; LZ.switchBranch(c);
+          var c = b.dataset.home, nm = LZ.brName(c);
+          var ok = await ui.dialog({ title: nm + '을(를) 기본 지점으로 할까요?', body: '로그인하면 기본 지점으로 열려요. 다른 지점에서는 기본 지점의 내 기록을 참고로 볼 수 있어요.' + (admin ? '' : '\n바꾸면 30일 동안 다시 바꿀 수 없어요.'), cancel: false,
+            buttons: [{ label: '기본 지점으로 정하기', kind: 'y', value: true }, { label: '취소', kind: 'g', value: false }] });
+          if (!ok) return;
+          ui.busy(true, '저장하고 있어요…');
+          try { var r = await LZ.api('setHome', { br: c }, { retry: 0 }); ui.busy(false); S.user = Object.assign({}, S.user, r.user); LZ.cache = {}; ui.toast(nm + '을(를) 기본 지점으로 정했어요.'); LZ.go('branch', {}, { replace: true, skipGuard: true }); }
+          catch (e) { ui.busy(false); ui.toast(ui.errText(e), 5000); }
         };
       });
+      var ask = $('#ask', root); if (ask) ask.onclick = function (e) { e.preventDefault(); LZ.go('qnaNew', { cat: 'branch' }); };
     }
+  };
+
+  /* ───── 공지: 안 읽은 수, 앱을 열 때 팝업(한 번) ───── */
+  LZ.noticeUnread = function () {
+    var hs = (S.me && S.me.notices) || [], seen = u.store.getJSON('lz.ntSeen') || {};
+    return hs.filter(function (n) { return seen[n.id] !== n.upd; }).length;
+  };
+  LZ.noticeMarkSeen = function (list) {
+    var seen = u.store.getJSON('lz.ntSeen') || {}, keep = {};
+    (S.me && S.me.notices || []).concat(list || []).forEach(function (n) { if (seen[n.id] !== undefined) keep[n.id] = seen[n.id]; });
+    (list || []).forEach(function (n) { keep[n.id] = n.upd; });
+    u.store.setJSON('lz.ntSeen', keep);
+  };
+  var popBusy = false;
+  LZ.noticePopup = async function () {
+    if (popBusy || !S.me || !S.me.notices) return;
+    var shown = u.store.getJSON('lz.ntPop') || {}, want = S.me.notices.filter(function (n) { return n.popup && shown[n.id] !== n.upd; });
+    if (LZ.skipPopupOnce) { LZ.skipPopupOnce = false; want.forEach(function (n) { shown[n.id] = n.upd; }); u.store.setJSON('lz.ntPop', shown); return; }   // 방금 가입한 분은 안내부터
+    if (!want.length) return;
+    popBusy = true;
+    try {
+      var r = await LZ.api('noticeList', {}, { retry: 0 }), map = {};
+      r.list.forEach(function (n) { map[n.id] = n; });
+      for (var i = 0; i < want.length && i < 3; i++) {
+        var n = map[want[i].id]; shown[want[i].id] = want[i].upd; u.store.setJSON('lz.ntPop', shown);
+        if (!n) continue;
+        LZ.noticeMarkSeen([n]);
+        var bt = (n.btns || []).map(function (b, k) { return { label: b.label + (/^https:/.test(b.to) ? ' ↗' : ''), kind: k ? 'g' : 'y', value: 'to:' + b.to }; });
+        var vp = ui.dialog({ title: '📢 ' + n.title, html: '<div class="ntpop">' + LZ.noticeBody(n, true) + '</div><p class="hint" style="margin-bottom:0">' + u.esc(n.store) + ' · ' + u.fmtDate(n.upd) + '</p>', cancel: 'ok',
+          buttons: bt.concat([{ label: '확인', kind: bt.length ? 'g' : 'y', value: 'ok' }, { label: '공지 모두 보기', kind: 'g', value: 'all' }]) });
+        LZ.fillImgs($('#layer'));
+        var v = await vp;
+        if (v === 'all') { LZ.go('notices', {}); break; }
+        if (v && String(v).indexOf('to:') === 0) { LZ.goTo(String(v).slice(3)); break; }
+      }
+    } catch (e) { /* 다음에 다시 */ }
+    popBusy = false;
   };
 
   /* ───── 로그인·로그아웃 ───── */
   LZ.applyFontSize = function () { var f = u.store.get('lz.fs'); document.documentElement.dataset.fs = f === '1' || f === '2' ? f : '0'; };
   LZ.cache = {};                                                   // 코스 목록 등 임시 보관(로그아웃하면 지움)
-  LZ.afterLogin = async function (user) {
+  LZ.setMe = function (me) {
+    if (me.user) S.user = Object.assign({}, S.user, me.user);
+    if (me.branches) S.branches = me.branches;
+    S.me = { pay: me.pay, pending: me.pending, trust: me.trust, qnaOn: me.qnaOn, qna: me.qna, notices: me.notices || [] };
+    if (me.br) LZ.setBranch(me.br, me.store);
+  };
+  LZ.afterLogin = async function (user, me) {
     S.user = user; u.store.set('lz.nick', user.nick); LZ.cache = {};
+    if (!user.must) u.store.set('lz.plen', String(user.pinLen || 4));
+    /* 지점: 링크의 ?s= → 마지막에 쓴 지점 → 기본 지점 */
+    var want = (LZ.branchFromUrl && LZ.branch) || user.lastBr || user.home || LZ.branch;
+    if (!me || me.br !== want) {
+      try { if (want) LZ.setBranch(want, LZ.brName(want)); LZ.setMe(await LZ.api('me', {}, { retry: 1 })); }
+      catch (e) { if (e && e.code === 'auth') return; if (me) LZ.setMe(me); }
+    } else LZ.setMe(me);
+    if (S.user.lastBr !== LZ.branch) LZ.api('useBranch', {}, { retry: 0 }).catch(function () { /* 무시 */ });
+    LZ.branchFromUrl = false;
     try { history.replaceState(history.state, '', location.pathname + LZ.linkQuery(user.nick)); } catch (e) { /* 무시 */ }
     LZ.rec.restore(); LZ.applyFontSize();
     if (user.must) return LZ.go('pin', { first: true }, { reset: true });
-    await LZ.go('courses', {}, { reset: true });
-    LZ.installHint();
+    await LZ.go(ui.isAdmin() ? 'dash' : 'courses', {}, { reset: true });
+    await LZ.noticePopup();
+    if (!ui.isStaff() && !LZ.joining) LZ.installHint();                   // 방금 가입한 분은 사용 방법을 다 본 뒤에
   };
   /* 내 등급·기간·결제 상태를 서버에서 다시 받음(결제 승인 뒤 바로 반영되도록) */
   LZ.refreshMe = async function () {
     try {
       var me = await LZ.api('me', {}, { retry: 0 });
       var was = S.user ? S.user.kind + S.user.st + S.user.end : '';
-      S.user = Object.assign({}, S.user, me.user); S.me = { pay: me.pay, pending: me.pending, trust: me.trust };
+      LZ.setMe(me);
       return was !== S.user.kind + S.user.st + S.user.end;
     } catch (e) { return false; }
   };
   LZ.onAuthLost = function (msg) {
     S.token = null; S.user = null; u.store.del('lz.t'); LZ.cache = {};
-    LZ.guard = null;
+    LZ.guard = null; S.me = null;
     LZ.go('login', { msg: msg }, { reset: true });
   };
   LZ.logout = async function () {
@@ -158,21 +251,17 @@
   };
 
   /* ───── 시작 ───── */
-  function applyCfg(d) { if (d.store) S.store = d.store; if (d.logos) { if (d.logos.dark) S.logos.dark = d.logos.dark; if (d.logos.light) S.logos.light = d.logos.light; } }
+  function applyCfg(d) { if (d.store && !S.store) S.store = d.store; if (d.logos) { if (d.logos.dark) S.logos.dark = d.logos.dark; if (d.logos.light) S.logos.light = d.logos.light; } }
   async function boot() {
     LZ.applyFontSize(); LZ.theme.apply();
     LZ.pwa.registerSW(function (apply) {
       ui.dialog({ title: '새 버전이 있어요', body: '앱을 새 버전으로 바꿀게요. 잠깐 화면이 다시 열려요.', cancel: false, buttons: [{ label: '지금 바꾸기', kind: 'y', value: true }, { label: '나중에', kind: 'g', value: false }] }).then(function (v) { if (v) apply(); });
     });
     if (LZ.configBroken) {
-      $('#boot').innerHTML = '<h2>설정 파일(js/config.js)을 읽지 못했어요</h2><p>지점 줄 끝의 <b>쉼표(,)</b>가 빠졌거나 따옴표(\')가 짝이 맞지 않을 때 생겨요. 줄과 줄 사이마다 쉼표가 있는지 확인해 주세요.</p>';
+      $('#boot').innerHTML = '<h2>설정 파일(js/config.js)을 읽지 못했어요</h2><p>따옴표(\')가 짝이 맞지 않거나 쉼표(,)가 빠졌을 때 생겨요. js/config.js 를 확인해 주세요.</p>';
       return;
     }
-    if (!LZ.ready(LZ.branch)) {
-      var b = $('#boot'), nm = (LZ.branchCfg && LZ.branchCfg.name) || '';
-      b.innerHTML = '<h2>' + (nm ? u.esc(nm) + '은(는) 아직 준비 중이에요' : '서버 주소가 아직 없어요') + '</h2><p>매장 운영자에게 문의해 주세요.</p>';
-      return;
-    }
+    if (!LZ.ready()) { $('#boot').innerHTML = '<h2>서버 주소가 아직 없어요</h2><p>js/config.js 의 API 에 앱스크립트 배포 주소를 넣어 주세요.</p>'; return; }
     /* 카카오톡 같은 앱 안 브라우저: 기본 브라우저로 열도록 안내 */
     var inapp = LZ.pwa.inApp();
     if (inapp && !LZ.pwa.standalone() && u.store.get('lz.inappOk') !== '1') await LZ.screens.inappGate(inapp);
@@ -183,27 +272,36 @@
     try {
       var cfg = await LZ.api('cfg', { lv: cached.logoVer || 0 }, { noAuth: true, retry: 1 });
       var keep = { store: cfg.store, logoVer: cfg.logoVer, logos: cfg.logos || cached.logos };
+      if (cfg.branches) S.branches = cfg.branches;
+      if (cfg.join) S.join = cfg.join;
+      if (LZ.branch && cfg.branch !== LZ.branch) { LZ.setBranch(''); LZ.branchFromUrl = false; }   // 없어진 지점 코드(예전 링크)면 서버가 정하게
+      S.store = cfg.store || S.store;
       applyCfg(keep); u.store.setJSON('lz.cfg', keep);
       if (cfg.logos) { S.logos.dark = cfg.logos.dark || 'assets/logo-dark.png'; S.logos.light = cfg.logos.light || 'assets/logo-light.png'; }
     } catch (e) { /* 서버가 느려도 일단 계속 */ }
 
     var nickParam = new URLSearchParams(location.search).get('u');
     S.token = u.store.get('lz.t');
-    if (S.token && nickParam && u.store.get('lz.nick') && nickParam.toLowerCase() !== u.store.get('lz.nick').toLowerCase()) {   // 다른 사람 링크로 들어옴
+    var other = S.token && nickParam && u.store.get('lz.nick') && nickParam.toLowerCase() !== u.store.get('lz.nick').toLowerCase();
+    if (other) {                                                                    // 다른 사람 링크로 들어옴(내 예전 닉네임이면 그대로)
+      var mine = null; try { mine = await LZ.api('me', {}, { retry: 0 }); } catch (e) { mine = null; }
+      var nk = nickParam.toLowerCase(), me0 = mine && mine.user;
+      if (me0 && (me0.nick.toLowerCase() === nk || (me0.prev || '').toLowerCase() === nk)) { u.store.set('lz.nick', me0.nick); await LZ.afterLogin(me0, mine); return; }
       LZ.api('logout', {}, { retry: 0, timeout: 5000 }).catch(function () {}); S.token = null; u.store.del('lz.t'); u.store.del('lz.pend');
     }
     if (S.token) {
-      try { var me = await LZ.api('me', {}); S.store = me.store || S.store; S.me = { pay: me.pay, pending: me.pending, trust: me.trust }; await LZ.afterLogin(me.user); return; }
+      try { var me = await LZ.api('me', {}); u.store.del('lz.ref'); await LZ.afterLogin(me.user, me); return; }
       catch (e) {
         if (e && e.code !== 'auth') { LZ.screens.fatal(e); return; }       // 인터넷 문제 등: 로그아웃시키지 않고 다시 시도 안내
         S.token = null; u.store.del('lz.t');
       }
     }
     await LZ.go('login', {}, { reset: true });
+    if (LZ.wantJoin && S.join && S.join.on) await LZ.go('join', {});                // 초대 링크·QR(?join=1)은 가입 화면으로 바로
   }
   LZ.screens.fatal = function (e) {
     var b = $('#boot'); if (b) b.parentNode.removeChild(b);
-    var root = $('#app'); root.hidden = false; root.innerHTML = '<div class="bd nt"><div class="err"><img src="' + u.esc(S.logos.light) + '" alt="" style="width:180px;margin:0 auto 16px;display:block">' + ui.errorBlock(ui.errText(e)).replace('class="err"', 'class=""') + '</div></div>';
+    var root = $('#app'); root.hidden = false; root.innerHTML = '<div class="bd nt"><div class="err"><img src="' + u.esc(ui.logoSrc()) + '" alt="" style="width:180px;margin:0 auto 16px;display:block">' + ui.errorBlock(ui.errText(e)).replace('class="err"', 'class=""') + '</div></div>';
     $('[data-retry]', root).onclick = function () { location.reload(); };
     LZ.booted = true;
   };
