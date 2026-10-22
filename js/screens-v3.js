@@ -1,14 +1,14 @@
-/* v3 화면: 닉네임 바꾸기 · 공지사항(보기·쓰기) · 현황판 · 지점 관리 · 활동 기록 */
+/* v3 화면: 닉네임 바꾸기 · 공지사항(보기·쓰기) · 현황판 · 매장 관리 · 활동 기록 */
 (function () {
   'use strict';
   var LZ = window.LZ, u = LZ.u, ui = LZ.ui, $ = u.$, $$ = u.$$, esc = u.esc, S = LZ.S;
 
-  /* ───── 닉네임 바꾸기: 모든 지점에서 하나뿐, 7일에 한 번, 예전 이름은 7일 동안 보호 ───── */
+  /* ───── 닉네임 바꾸기: 모든 매장에서 하나뿐, 7일에 한 번, 예전 이름은 7일 동안 보호 ───── */
   LZ.screens.nick = {
     show: function (p, root) {
       var us = S.user, wait = us.nickNext && us.nickNext > Date.now(), first = us.kind === 'admin' && us.nick === '관리자';
       root.innerHTML = '<div class="scr">' + ui.hdr2('닉네임 바꾸기') + '<div class="bd nt">' +
-        '<div class="ban">닉네임은 <b>모든 지점에서 하나뿐</b>이에요. <b>7일에 한 번</b> 바꿀 수 있고, 예전 닉네임은 7일 동안 다른 분이 쓸 수 없게 지켜 둬요. 기록·이용권·신뢰도는 그대로 이어져요.</div>' +
+        '<div class="ban">닉네임은 <b>모든 매장에서 하나뿐</b>이에요. <b>7일에 한 번</b> 바꿀 수 있고, 예전 닉네임은 7일 동안 다른 분이 쓸 수 없게 지켜 둬요. 기록·이용권·신뢰도는 그대로 이어져요.</div>' +
         '<div style="font-size:16px;margin:6px 0 4px">지금 닉네임: <b>' + esc(us.nick) + '</b></div>' +
         (first ? '<div class="ban r">처음 만든 관리자 계정은 닉네임을 바꿀 수 없어요.</div>'
           : wait ? '<div class="ban r">' + u.fmtDate(us.nickNext) + ' ' + new Date(us.nickNext).getHours() + '시부터 다시 바꿀 수 있어요.</div>'
@@ -73,13 +73,13 @@
     show: async function (p, root, alive) {
       var manage = !!p.manage && ui.isStaff(), title = manage ? '공지 쓰기 · 관리' : '공지사항';
       root.innerHTML = '<div class="scr">' + ui.hdr2(title) + '<div class="bd nt">' + ui.skeleton(3) + '</div></div>';
-      var d = await LZ.api('noticeList', manage ? { manage: 1 } : {}); if (!alive()) return;
+      var d = await LZ.capi('noticeList', manage ? { manage: 1 } : {}, { onFresh: LZ.fresh('notices') }); if (!alive()) return;
       var open = {}, seen = u.store.getJSON('lz.ntSeen') || {};
       if (!manage) LZ.noticeMarkSeen(d.list);
       function draw() {
         root.innerHTML = '<div class="scr">' + ui.hdr2(title) + '<div class="bd nt">' +
-          (manage ? '<button class="btn" id="new" type="button" style="margin-bottom:10px">새 공지 쓰기</button><p class="hint" style="margin-top:0">' + (ui.isAdmin() ? '모든 지점 또는 한 지점에 올릴 수 있어요.' : '운영자는 소속 지점(' + esc(S.user.homeName || '') + ') 공지만 쓸 수 있어요.') + ' 게시 기간이 지난 공지도 여기에는 보여요.</p>'
-            : '<p class="hint" style="margin-top:0">📍 ' + esc(S.store) + '와 모든 지점 공지가 보여요.</p>') +
+          (manage ? '<button class="btn" id="new" type="button" style="margin-bottom:10px">새 공지 쓰기</button><p class="hint" style="margin-top:0">' + (ui.isAdmin() ? '모든 매장 또는 한 매장에 올릴 수 있어요.' : '운영자는 소속 매장(' + esc(S.user.homeName || '') + ') 공지만 쓸 수 있어요.') + ' 게시 기간이 지난 공지도 여기에는 보여요.</p>'
+            : '<p class="hint" style="margin-top:0">📍 ' + esc(S.store) + '와 모든 매장 공지가 보여요.</p>') +
           (d.list.map(function (n) {
             var isNew = !manage && seen[n.id] !== n.upd, on = open[n.id] || (!manage && d.list.length === 1);
             return '<div class="nt-item"><button class="nh" type="button" data-o="' + esc(n.id) + '">' + (n.pin ? '<span class="pinmark">📌 고정</span>' : '') + '<span style="flex:1">' + (isNew ? '<i class="dot"></i>' : '') + esc(n.title) + '<small style="display:block;font-size:12.5px;color:var(--mut);margin-top:3px">' + ntMeta(n) + '</small></span><span aria-hidden="true">' + (on ? '▴' : '▾') + '</span></button>' +
@@ -107,7 +107,7 @@
       var br = it.id ? it.br : (admin ? '' : S.user.home);
       root.innerHTML = '<div class="scr">' + ui.hdr2(it.id ? '공지 고치기' : '새 공지') + '<div class="bd nt">' +
         '<label class="lbl" style="margin-top:0">올릴 곳</label>' +
-        (admin ? '<select class="inp" id="nb"><option value="">모든 지점</option>' + brs.map(function (b) { return '<option value="' + esc(b.code) + '"' + (b.code === br ? ' selected' : '') + '>' + esc(b.name) + (b.active ? '' : ' (닫힘)') + '</option>'; }).join('') + '</select>'
+        (admin ? '<select class="inp" id="nb"><option value="">모든 매장</option>' + brs.map(function (b) { return '<option value="' + esc(b.code) + '"' + (b.code === br ? ' selected' : '') + '>' + esc(b.name) + (b.active ? '' : ' (닫힘)') + '</option>'; }).join('') + '</select>'
           : '<div style="font-size:16px"><b>' + esc(S.user.homeName || '') + '</b></div>') +
         '<label class="lbl" for="nt">제목 (40자까지)</label><input class="inp" id="nt" maxlength="40" value="' + esc(it.title || '') + '" placeholder="예: 10월 센서 교체 안내">' +
         '<label class="lbl">내용 (2000자까지) <span style="font-size:12px">— https:// 주소를 적으면 눌러서 열 수 있어요</span></label><div id="ed"></div>' +
@@ -161,72 +161,72 @@
     }
   };
 
-  /* ───── 현황판 (관리자 첫 화면 · 운영자는 소속 지점, 결제 금액 제외) ───── */
+  /* ───── 현황판 (관리자 첫 화면 · 운영자는 소속 매장, 결제 금액 제외) ───── */
   LZ.screens.dash = {
     show: async function (p, root, alive) {
       var admin = ui.isAdmin(), br = admin ? (u.store.get('lz.dashBr') || '') : '';
       root.innerHTML = '<div class="scr">' + ui.hdr('현황판') + '<div class="bd">' + ui.skeleton(4) + '</div>' + ui.tabs('dash') + '</div>';
-      async function load() {
-        var d = await LZ.api('dash', { br: br }); if (!alive()) return;
-        LZ.refreshMe();
+      async function load(force) {
+        var d = await (force ? LZ.api('dash', { br: br }) : LZ.capi('dash', { br: br }, { onFresh: LZ.fresh('dash') })); if (!alive()) return;
+        LZ.refreshMe().then(function (ch) { if (ch && alive()) LZ.softRefresh('dash'); });
         var t = d.total || {};
         function kpi(n, label, sub, go) { return '<div' + (go ? ' role="button" tabindex="0" data-go="' + go + '"' : '') + '><b>' + n + '</b><span>' + label + '</span>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>'; }
         root.innerHTML = '<div class="scr">' + ui.hdr('현황판') + '<div class="bd">' +
-          (admin ? '<div class="seg" id="dbr" style="margin-bottom:10px;flex-wrap:wrap">' + [['', '모든 지점']].concat((S.branches || []).map(function (b) { return [b.code, b.name]; })).map(function (f) { return '<button type="button" data-b="' + esc(f[0]) + '" class="' + (br === f[0] ? 'on' : '') + '" style="font-size:14px">' + esc(f[1]) + '</button>'; }).join('') + '</div>' : '<p class="hint" style="margin-top:0">📍 ' + esc(d.store) + ' 기준이에요.</p>') +
+          (admin ? '<div class="seg" id="dbr" style="margin-bottom:10px;flex-wrap:wrap">' + [['', '모든 매장']].concat((S.branches || []).map(function (b) { return [b.code, b.name]; })).map(function (f) { return '<button type="button" data-b="' + esc(f[0]) + '" class="' + (br === f[0] ? 'on' : '') + '" style="font-size:14px">' + esc(f[1]) + '</button>'; }).join('') + '</div>' : '<p class="hint" style="margin-top:0">📍 ' + esc(d.store) + ' 기준이에요.</p>') +
           '<div class="kpi">' +
           kpi(d.today, '오늘 들어온 회원', '접속 중 ' + d.seats.used + '명' + (d.seats.waiting ? ' · 대기 ' + d.seats.waiting : ''), 'members') +
           kpi(t.all || 0, '회원 (운영진 제외)', '체험 ' + (t.trial || 0) + ' · 월간 ' + (t.month || 0) + ' · 연간 ' + (t.year || 0) + ' · 끝남 ' + (t.expired || 0), 'members') +
-          (admin ? kpi(u.won(d.month.net), d.month.label.replace('-', '년 ') + '월 결제', d.month.count + '건' + (d.month.refund ? ' · 환불 ' + u.won(d.month.refund) : ''), 'payments') + kpi(d.pending, '입금 확인 대기', d.pending ? '눌러서 확인하기' : '', 'payments') : '') +
+          (admin ? kpi(u.won(d.month.net), d.month.label.replace('-', '년 ') + '월 결제', d.month.count + '건' + (d.month.refund ? ' · 환불 ' + u.won(d.month.refund) : ''), 'payments') + kpi(d.pending, '입금 확인 대기', d.pending ? '눌러서 확인하기' : '', 'payments') + kpi(d.refundReq || 0, '환불 신청', d.refundReq ? '계좌로 보내 주세요' : '', 'payments') : '') +
           kpi(d.qnaOpen, '답할 문의', '', S.me && S.me.qnaOn ? 'qna' : '') +
           kpi(d.soon.length, '7일 안에 끝나는 회원', '', '') +
           kpi(d.joinsToday || 0, '오늘 직접 가입', '', 'members') +
           kpi(d.conv && d.conv.joined ? Math.round(d.conv.paid * 100 / d.conv.joined) + '%' : '-', '최근 30일 가입 → 결제', d.conv ? '가입 ' + d.conv.joined + '명(직접 ' + d.conv.self + ') · 결제 ' + d.conv.paid + '명' : '', '') +
           '</div>' +
-          '<div class="blk"><h4>지점별 회원</h4><table class="tbl"><thead><tr><th>지점</th><th>체험</th><th>월간</th><th>연간</th><th>끝남</th><th>오늘</th></tr></thead><tbody>' +
+          '<div class="blk"><h4>매장별 회원</h4><table class="tbl"><thead><tr><th>매장</th><th>체험</th><th>월간</th><th>연간</th><th>끝남</th><th>오늘</th></tr></thead><tbody>' +
           d.branches.map(function (r) { return '<tr><td>' + esc(r.name) + (r.active === 0 ? ' <span class="chip">닫힘</span>' : '') + '</td><td>' + r.trial + '</td><td>' + r.month + '</td><td>' + r.year + '</td><td>' + r.expired + '</td><td>' + r.today + '</td></tr>'; }).join('') + '</tbody></table></div>' +
           '<div class="blk"><h4>7일 안에 끝나는 회원</h4>' + (d.soon.map(function (m) { return '<div class="row2" style="margin:0;padding:7px 0;border-top:1px solid var(--line2)"><span><b>' + esc(m.nick) + '</b> <span class="brtag">' + esc(m.homeName) + '</span><br><small class="hint" style="margin:0">' + esc(m.kindName) + ' · ' + u.ymd(m.end) + '까지</small></span><span class="chip ' + (m.left <= 1 ? 'r' : 'y') + '">' + (m.left <= 0 ? '오늘까지' : 'D-' + m.left) + '</span></div>'; }).join('') || '<p class="hint" style="margin:0">없어요.</p>') + '</div>' +
           '<div class="blk"><h4>최근 7일 가입</h4>' + (d.recent.map(function (m) { return '<div class="row2" style="margin:0;padding:7px 0;border-top:1px solid var(--line2)"><span><b>' + esc(m.nick) + '</b> <span class="brtag">' + esc(m.homeName) + '</span></span><small class="hint" style="margin:0">' + esc(m.kindName) + ' · ' + u.fmtDate(m.created) + '</small></div>'; }).join('') || '<p class="hint" style="margin:0">없어요.</p>') + '</div>' +
           '<button class="sm" id="rf" type="button">새로고침</button></div>' + ui.tabs('dash') + '</div>';
         $$('#dbr button', root).forEach(function (b) { b.onclick = function () { br = b.dataset.b; u.store.set('lz.dashBr', br); load().catch(function (e) { ui.toast(ui.errText(e), 4000); }); }; });
         $$('[data-go]', root).forEach(function (k) { var go = function () { LZ.go(k.dataset.go, k.dataset.go === 'qna' ? {} : {}, k.dataset.go === 'payments' ? {} : { reset: true }); }; k.onclick = go; k.onkeydown = function (e) { if (e.key === 'Enter') go(); }; });
-        $('#rf', root).onclick = function () { load().then(function () { ui.toast('새로 불러왔어요', 1800); }, function (e) { ui.toast(ui.errText(e), 4000); }); };
+        $('#rf', root).onclick = function () { load(true).then(function () { ui.toast('새로 불러왔어요', 1800); }, function (e) { ui.toast(ui.errText(e), 4000); }); };
       }
       await load();
     }
   };
 
-  /* ───── 지점 관리 (관리자): 추가 · 이름 바꾸기 · 열기/닫기 ───── */
+  /* ───── 매장 관리 (관리자): 추가 · 이름 바꾸기 · 열기/닫기 ───── */
   LZ.screens.branches = {
     show: async function (p, root, alive) {
-      root.innerHTML = '<div class="scr">' + ui.hdr2('지점 관리') + '<div class="bd nt">' + ui.skeleton(3) + '</div></div>';
-      var d = await LZ.api('branchList', {}); if (!alive()) return;
+      root.innerHTML = '<div class="scr">' + ui.hdr2('매장 관리') + '<div class="bd nt">' + ui.skeleton(3) + '</div></div>';
+      var d = await LZ.capi('branchList', {}, { onFresh: LZ.fresh('branches') }); if (!alive()) return;
       function sync() { S.branches = d.branches.map(function (b) { return { code: b.code, name: b.name, active: b.active }; }); var c = S.branches.filter(function (b) { return b.code === LZ.branch; })[0]; if (c) LZ.setBranch(c.code, c.name); }
       function draw() {
-        root.innerHTML = '<div class="scr">' + ui.hdr2('지점 관리') + '<div class="bd nt">' +
-          '<div class="ban">지점은 서버 하나 안에서 나뉘어요. 지점마다 <b>기록</b>이 따로이고, 회원·이용권·코스 목록은 함께 써요. 회원이 문의(지점 추가 요청)를 남기면 여기서 만들어 주세요.</div>' +
+        root.innerHTML = '<div class="scr">' + ui.hdr2('매장 관리') + '<div class="bd nt">' +
+          '<div class="ban">매장은 서버 하나 안에서 나뉘어요. 매장마다 <b>기록</b>이 따로이고, 회원·이용권·코스 목록은 함께 써요. 회원이 문의(매장 추가 요청)를 남기면 여기서 만들어 주세요.</div>' +
           d.branches.map(function (b) {
             return '<div class="blk"><div class="row2" style="margin:0 0 8px"><span style="font-size:17px"><b>' + esc(b.name) + '</b> ' + (b.active ? '' : '<span class="chip r">닫힘</span>') + '</span><span class="hint" style="margin:0">회원 ' + b.members + '명</span></div>' +
-              '<div class="hint" style="margin:0 0 8px">지점 코드 <b>' + esc(b.code) + '</b> · 초대 주소 끝 <b>?s=' + esc(b.code) + '</b></div>' +
+              '<div class="hint" style="margin:0 0 8px">매장 코드 <b>' + esc(b.code) + '</b> · 초대 주소 끝 <b>?s=' + esc(b.code) + '</b></div>' +
               '<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="sm" type="button" data-rn="' + esc(b.code) + '">이름 바꾸기</button><button class="sm" type="button" data-ac="' + esc(b.code) + '">' + (b.active ? '닫기' : '다시 열기') + '</button></div></div>';
           }).join('') +
-          '<div class="blk"><h4>새 지점 만들기</h4><label class="lbl" for="bn" style="margin-top:0">지점 이름 (20자까지)</label><input class="inp" id="bn" maxlength="20" placeholder="예: 제이드 수유점">' +
-          '<label class="lbl" for="bc">지점 코드 (영문 소문자·숫자 2~16자, 바꿀 수 없어요)</label><input class="inp" id="bc" maxlength="16" autocapitalize="none" autocomplete="off" placeholder="예: suyu">' +
-          '<div class="msg" id="err" role="alert"></div><button class="btn" id="mk" type="button" style="margin-top:8px">지점 만들기</button></div></div></div>';
+          '<div class="blk"><h4>새 매장 만들기</h4><label class="lbl" for="bn" style="margin-top:0">매장 이름 (20자까지)</label><input class="inp" id="bn" maxlength="20" placeholder="예: 제이드 수유점">' +
+          '<label class="lbl" for="bc">매장 코드 (영문 소문자·숫자 2~16자, 바꿀 수 없어요)</label><input class="inp" id="bc" maxlength="16" autocapitalize="none" autocomplete="off" placeholder="예: suyu">' +
+          '<div class="msg" id="err" role="alert"></div><button class="btn" id="mk" type="button" style="margin-top:8px">매장 만들기</button></div></div></div>';
         $('#bc', root).oninput = function (e) { var v = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, ''); if (v !== e.target.value) e.target.value = v; };
         $('#mk', root).onclick = async function () {
           var name = $('#bn').value.trim(), code = $('#bc').value.trim(), err = $('#err'); err.textContent = '';
-          if (!name) { err.textContent = '지점 이름을 적어 주세요.'; return; }
-          if (!/^[a-z][a-z0-9]{1,15}$/.test(code)) { err.textContent = '지점 코드는 영문 소문자로 시작하는 2~16자로 적어 주세요. 예: suyu'; return; }
-          if (d.branches.some(function (b) { return b.code === code; })) { err.textContent = '이미 있는 지점 코드예요.'; return; }
-          if (!(await ui.confirm(name + ' 지점을 만들까요?', '지점 코드 "' + code + '"는 나중에 바꿀 수 없어요.', '만들기'))) return;
+          if (!name) { err.textContent = '매장 이름을 적어 주세요.'; return; }
+          if (!/^[a-z][a-z0-9]{1,15}$/.test(code)) { err.textContent = '매장 코드는 영문 소문자로 시작하는 2~16자로 적어 주세요. 예: suyu'; return; }
+          if (d.branches.some(function (b) { return b.code === code; })) { err.textContent = '이미 있는 매장 코드예요.'; return; }
+          if (!(await ui.confirm(name + ' 매장을 만들까요?', '매장 코드 "' + code + '"는 나중에 바꿀 수 없어요.', '만들기'))) return;
           ui.busy(true, '만들고 있어요…');
-          try { d = await LZ.api('branchSave', { code: code, name: name, create: 1 }, { retry: 0 }); ui.busy(false); sync(); ui.toast(name + ' 지점을 만들었어요'); draw(); }
+          try { d = await LZ.api('branchSave', { code: code, name: name, create: 1 }, { retry: 0 }); ui.busy(false); sync(); ui.toast(name + ' 매장을 만들었어요'); draw(); }
           catch (e) { ui.busy(false); err.textContent = ui.errText(e); }
         };
         $$('[data-rn]', root).forEach(function (b) {
           b.onclick = async function () {
             var br = d.branches.filter(function (x) { return x.code === b.dataset.rn; })[0];
-            var v = await ui.dialog({ title: '지점 이름 바꾸기', html: '<input class="inp" id="rnv" maxlength="20" value="' + esc(br.name) + '" style="margin-bottom:12px">', cancel: null, collect: true, buttons: [{ label: '저장', kind: 'y', value: 'ok' }, { label: '취소', kind: 'g', value: null }] });
+            var v = await ui.dialog({ title: '매장 이름 바꾸기', html: '<input class="inp" id="rnv" maxlength="20" value="' + esc(br.name) + '" style="margin-bottom:12px">', cancel: null, collect: true, buttons: [{ label: '저장', kind: 'y', value: 'ok' }, { label: '취소', kind: 'g', value: null }] });
             var nv = v && v.v === 'ok' ? v.val.trim() : '';
             if (!nv || nv === br.name) return;
             ui.busy(true, '저장하고 있어요…');
@@ -237,7 +237,7 @@
         $$('[data-ac]', root).forEach(function (b) {
           b.onclick = async function () {
             var br = d.branches.filter(function (x) { return x.code === b.dataset.ac; })[0], on = !br.active;
-            if (!on && !(await ui.confirm(br.name + '을(를) 닫을까요?', '닫으면 회원이 이 지점을 고를 수 없어요. 기록은 지워지지 않고, 다시 열면 그대로 보여요.', '닫기', true))) return;
+            if (!on && !(await ui.confirm(br.name + '을(를) 닫을까요?', '닫으면 회원이 이 매장을 고를 수 없어요. 기록은 지워지지 않고, 다시 열면 그대로 보여요.', '닫기', true))) return;
             ui.busy(true, '저장하고 있어요…');
             try { d = await LZ.api('branchSave', { code: br.code, name: br.name, active: on ? 1 : 0 }, { retry: 0 }); ui.busy(false); sync(); ui.toast(on ? '다시 열었어요' : '닫았어요'); draw(); }
             catch (e) { ui.busy(false); ui.toast(ui.errText(e), 4500); }

@@ -17,20 +17,21 @@
         return '<div class="blk"><h4>내 이용권</h4><div style="font-size:17px"><b>' + esc(us.kindName) + '</b> · ' + (us.st === 'expired' ? '<span style="color:var(--rt)">기간 끝남</span>' : u.dday(us.left)) + '</div>' +
           '<div class="meta">시작일 ' + (u.ymd(us.start) || '-') + ' · 종료일 ' + (u.ymd(us.end) || '-') + '</div>' +
           (pend ? '<div class="ban b" style="margin:8px 0 0">입금 확인 중: ' + esc(pend.planName) + ' ' + u.won(pend.amount) + '</div>' : '') +
-          '<button class="btn" id="pay" type="button" style="margin-top:10px">' + (pend ? '결제 상태 보기' : us.kind === 'trial' || us.st === 'expired' ? '이용권 결제하기' : '이용권 연장 · 결제') + '</button></div>';
+          '<button class="btn" id="pay" type="button" style="margin-top:10px">' + (pend ? '결제 상태 보기' : us.kind === 'trial' || us.st === 'expired' ? '이용권 결제하기' : '이용권 연장 · 결제') + '</button>' +
+          (S.me && S.me.refund && (S.me.refund.can || S.me.refund.req) ? '<button class="btn g" id="rfd" type="button" style="margin-top:8px">' + (S.me.refund.req ? '환불 신청 확인 중 · 보기' : '환불 신청') + '</button>' : '') + '</div>';
       }
       var nu = LZ.noticeUnread();
       function acctBlock() {
         return '<div class="blk"><h4>내 계정</h4>' +
           '<div class="row2" style="margin:0;padding:8px 0"><span>닉네임 <b>' + esc(us.nick) + '</b>' + (us.prev ? '<br><small class="hint" style="margin:0">예전 이름 ' + esc(us.prev) + '(은)는 잠시 다른 분이 쓸 수 없게 지켜 둬요</small>' : '') + '</span><button class="sm" id="nk" type="button">바꾸기</button></div>' +
-          '<div class="row2" style="margin:0;padding:8px 0;border-top:1px solid var(--line2)"><span>기본 지점 <b>' + esc(us.homeName || LZ.brName(us.home)) + '</b></span>' + (us.kind === 'op' ? '<span class="hint" style="margin:0">관리자가 정해요</span>' : '<button class="sm" id="hm" type="button">바꾸기</button>') + '</div>' +
-          '<div class="row2" style="margin:0;padding:8px 0;border-top:1px solid var(--line2)"><span>지금 지점 <b>' + esc(S.store) + '</b></span><button class="sm" id="brc" type="button">지점 고르기</button></div>' +
-          '<p class="hint" style="margin:4px 0 0">이용권·닉네임·신뢰도는 모든 지점 공통이고, 기록은 지점마다 따로예요.</p></div>';
+          '<div class="row2" style="margin:0;padding:8px 0;border-top:1px solid var(--line2)"><span>기본 매장 <b>' + esc(us.homeName || LZ.brName(us.home)) + '</b></span>' + (us.kind === 'op' ? '<span class="hint" style="margin:0">관리자가 정해요</span>' : '<button class="sm" id="hm" type="button">바꾸기</button>') + '</div>' +
+          '<div class="row2" style="margin:0;padding:8px 0;border-top:1px solid var(--line2)"><span>지금 매장 <b>' + esc(S.store) + '</b></span><button class="sm" id="brc" type="button">매장 고르기</button></div>' +
+          '<p class="hint" style="margin:4px 0 0">이용권·닉네임·신뢰도는 모든 매장 공통이고, 기록은 매장마다 따로예요.</p></div>';
       }
       root.innerHTML = '<div class="scr">' + ui.hdr('설정') + '<div class="bd">' + memBlock() + LZ.trustChip() +
-        (admin ? '<div class="blk"><h4>관리자</h4><div style="display:grid;gap:8px"><button class="btn g" id="dsh" type="button">현황판</button><button class="btn g" id="pays" type="button">결제 확인 · 환불</button><button class="btn g" id="brs" type="button">지점 관리</button><button class="btn g" id="acfg" type="button">요금 · QR · 계좌 · 좌석 · 문의 · 로고</button><button class="btn g" id="alog" type="button">활동 기록</button></div></div>' : '') +
+        (admin ? '<div class="blk"><h4>관리자</h4><div style="display:grid;gap:8px"><button class="btn g" id="dsh" type="button">현황판</button><button class="btn g" id="pays" type="button">결제 확인 · 환불</button><button class="btn g" id="brs" type="button">매장 관리</button><button class="btn g" id="acfg" type="button">요금 · QR · 계좌 · 접속 인원 · 문의 · 로고</button><button class="btn g" id="alog" type="button">활동 기록</button></div></div>' : '') +
         acctBlock() +
-        '<div class="blk"><h4>알리기</h4><div style="display:grid;gap:8px"><button class="btn" id="invt" type="button">🎁 친구에게 알리기</button>' + (staff ? '<button class="btn g" id="pst" type="button">가입 QR 포스터 만들기</button>' : '') + '<button class="btn g" id="gde" type="button">사용 방법 보기</button></div></div>' +
+        '<div class="blk"><h4>알리기 · 사용 방법</h4><div style="display:grid;gap:8px"><button class="btn" id="invt" type="button">🎁 친구에게 알리기</button>' + (staff ? '<button class="btn g" id="pst" type="button">가입 QR 포스터 만들기</button>' : '') + '<button class="btn g" id="gde" type="button">사용 방법 보기</button></div></div>' +
         '<div class="blk"><h4>공지사항' + (nu ? ' <span class="chip r">새 공지 ' + nu + '</span>' : '') + '</h4><button class="btn g" id="nts" type="button">공지 보기</button>' + (staff ? '<button class="btn g" id="ntm" type="button" style="margin-top:8px">공지 쓰기 · 관리</button>' : '') + '</div>' +
         (S.me && S.me.qnaOn ? '<div class="blk"><h4>문의하기' + (!staff && S.me.qna ? ' <span class="chip r">새 답변 ' + S.me.qna + '</span>' : '') + '</h4><p class="hint" style="margin:-4px 0 8px">자주 묻는 질문을 보거나, 운영진에게 1:1로 물어볼 수 있어요.</p><button class="btn g" id="qna" type="button">문의하기</button></div>' : '') +
         '<div class="blk"><h4>비밀번호</h4><button class="btn g" id="pw" type="button">비밀번호 바꾸기</button></div>' +
@@ -38,9 +39,10 @@
         '<div class="blk"><h4>누를 때 진동</h4><div class="seg" id="bz">' + [['1', '켜기'], ['0', '끄기']].map(function (f) { return '<button type="button" data-b="' + f[0] + '" class="' + ((u.buzzOn() ? '1' : '0') === f[0] ? 'on' : '') + '">' + f[1] + '</button>'; }).join('') + '</div><p class="hint">비밀번호·칸 수·타격감 단추를 누를 때 휴대폰이 짧게 떨려요. 안드로이드는 진동, 아이폰은 iOS 18 이상에서 가벼운 누름 느낌이에요(휴대폰 무음·진동 설정에 따라 다를 수 있어요).</p></div>' +
         '<div class="blk"><h4>글씨 크기</h4><div class="seg" id="fs">' + [['0', '보통'], ['1', '크게'], ['2', '아주 크게']].map(function (f) { return '<button type="button" data-f="' + f[0] + '" class="' + (fs === f[0] ? 'on' : '') + '">' + f[1] + '</button>'; }).join('') + '</div></div>' +
         (P.standalone() ? '' : '<div class="blk"><h4>홈 화면에 추가</h4><button class="btn g" id="inst" type="button">추가하는 방법 보기</button></div>') +
-        '<div class="blk"><h4>내 기록 공개</h4><p class="hint" style="margin:-4px 0 8px">켜 두면 같은 지점·같은 코스를 쓰는 회원이 내 기록을 보고 비교할 수 있어요. 기본은 공개예요. 코스마다 모든 지점에 함께 적용돼요.' + (us.st === 'expired' ? ' (이용 기간이 끝나서 지금은 다른 회원에게 보이지 않아요.)' : '') + '</p><div id="pubs">' + ui.skeleton(1) + '</div></div>' +
+        '<div class="blk"><h4>내 기록 공개</h4><p class="hint" style="margin:-4px 0 8px">켜 두면 같은 매장·같은 코스를 쓰는 회원이 내 기록을 보고 비교할 수 있어요. 기본은 공개예요. 코스마다 모든 매장에 함께 적용돼요.' + (us.st === 'expired' ? ' (이용 기간이 끝나서 지금은 다른 회원에게 보이지 않아요.)' : '') + '</p><div id="pubs">' + ui.skeleton(1) + '</div></div>' +
         '<button class="btn g" id="out" type="button">로그아웃</button><p class="hint" style="text-align:center">앱 버전 ' + VERSION + ' · ' + esc(P.device) + '</p></div>' + ui.tabs('settings') + '</div>';
       var pb = $('#pay'); if (pb) pb.onclick = function () { LZ.go('pay', {}); };
+      var rfd = $('#rfd'); if (rfd) rfd.onclick = function () { LZ.go('refund', {}); };
       LZ.bindMemberBanner(root);
       var ps = $('#pays'); if (ps) ps.onclick = function () { LZ.go('payments', {}); };
       var ac = $('#acfg'); if (ac) ac.onclick = function () { LZ.go('adminCfg', {}); };
@@ -63,7 +65,7 @@
       var i = $('#inst'); if (i) i.onclick = function () { LZ.go('install', {}); };
       $('#out').onclick = function () { LZ.logout(); };
       try {
-        var cs = (LZ.cache.coursesBr === LZ.branch && LZ.cache.courses) || (await LZ.api('courses', {})).courses, pr = await LZ.api('prefs', {}); if (!alive()) return;
+        var both = await Promise.all([LZ.capi('courses', {}), LZ.capi('prefs', {}, { onFresh: LZ.fresh('settings') })]), cs = both[0].courses, pr = both[1]; if (!alive()) return;
         LZ.cache.courses = cs; LZ.cache.coursesBr = LZ.branch;
         var mine = cs.filter(function (c) { return (c.mine > 0 || c.homeMine > 0) && c.stage === 'done'; });
         $('#pubs').innerHTML = mine.map(function (c) {
@@ -90,7 +92,10 @@
   LZ.screens.members = {
     show: async function (p, root, alive) {
       root.innerHTML = '<div class="scr">' + ui.hdr('회원 관리') + '<div class="bd">' + ui.skeleton(4) + '</div>' + ui.tabs('members') + '</div>';
-      var res = await LZ.api('members', { br: '' }); if (!alive()) return;   // 관리자는 모든 지점 회원을 받고 화면에서 거름
+      var res = await LZ.capi('members', { br: '' }, { onFresh: function (d) {                    // 새 목록이 오면 이 화면 안에서만 바꿈(필터·입력은 그대로)
+        var apply = function () { if (!alive() || working) return; res = d; list = d.members; seats = d.seats; open = null; del = null; keep(); };
+        if (document.querySelector('#layer .dlg') || working) LZ.whenQuiet(apply, 'members'); else apply();
+      } }); if (!alive()) return;   // 관리자는 모든 매장 회원을 받고 화면에서 거름
       var list = res.members, seats = res.seats, admin = ui.isAdmin(), kind = 'trial', open = null, del = null, result = null, q = '', filt = 'all';
       var brs = res.branches || S.branches || [], brF = u.store.get('lz.memBr') || '', newHome = LZ.branch || S.user.home;
       if (!admin) brF = '';
@@ -103,8 +108,8 @@
       function memRow(m, i) {
         var self = m.uid === S.user.uid, per = u.period(m.start, m.end);
         return '<div class="mem"><div class="top"><div class="av">' + esc(m.nick[0]) + (m.online ? '<i class="on" title="접속 중"></i>' : '') + '</div><div style="flex:1;min-width:0"><div style="font-size:17px;font-weight:500;word-break:break-all">' + esc(m.nick) + (self ? ' (나)' : '') + '</div>' +
-          '<span class="chip ' + chipCls(m) + '">' + esc(ui.kindLabel(m)) + '</span>' + (m.active ? '' : ' <span class="chip r">이용 중지</span>') + (m.pendingPay ? ' <span class="chip r">입금 확인 대기</span>' : '') + (admin && m.homeName ? ' <span class="brtag">' + esc(m.homeName) + '</span>' : '') + (ui.isStaff(m) ? '' : m.src === 'self' ? ' <span class="chip">직접 가입</span>' : '') + (m.isNew && !ui.isStaff(m) ? ' <span class="chip y">NEW</span>' : '') + (m.sameDev ? ' <span class="chip r" title="같은 휴대폰으로 가입한 다른 계정">같은 폰 ' + m.sameDev + '개 더</span>' : '') + (m.stale ? ' <span class="chip">정리 대상</span>' : '') + (m.prev ? ' <span class="hint" style="margin:0;font-size:12px">(예전 ' + esc(m.prev) + ')</span>' : '') +
-          '<div class="meta">' + (per ? per + '<br>' : '') + (m.online ? '<b style="color:var(--gt)">● 지금 접속 중</b>' : '마지막 접속: ' + u.ago(m.seenAt || m.last)) + ' · 기록한 코스 ' + (m.courses || 0) + '곳 · 신뢰 ' + (m.trust || 0) + '점' + (m.kind === 'trial' ? ' · 체험 연장 ' + (m.ext || 0) + '/2' : '') + '</div></div>' +
+          '<span class="chip ' + chipCls(m) + '">' + esc(ui.kindLabel(m)) + '</span>' + (m.active ? '' : ' <span class="chip r">이용 중지</span>') + (m.pendingPay ? ' <span class="chip r">입금 확인 대기</span>' : '') + (admin && m.homeName ? ' <span class="brtag">' + esc(m.homeName) + '</span>' : '') + (ui.isStaff(m) ? '' : m.src === 'self' ? ' <span class="chip">직접 가입</span>' : '') + (m.isNew && !ui.isStaff(m) ? ' <span class="chip y">NEW</span>' : '') + (m.sameDev ? ' <span class="chip r" title="같은 휴대폰으로 가입한 다른 계정">같은 폰 ' + m.sameDev + '개 더</span>' : '') + (m.stale ? ' <span class="chip">정리 대상</span>' : '') + (m.refNick ? ' <span class="chip y">추천: ' + esc(m.refNick) + (m.refPaid ? ' ✓' : '') + '</span>' : '') + (m.prev ? ' <span class="hint" style="margin:0;font-size:12px">(예전 ' + esc(m.prev) + ')</span>' : '') +
+          '<div class="meta">' + (per ? per + '<br>' : '') + (m.online ? '<b style="color:var(--gt)">● 지금 접속 중</b>' : '마지막 접속: ' + u.ago(m.seenAt || m.last)) + ' · 기록한 코스 ' + (m.courses || 0) + '곳 · 신뢰도 ' + (m.trust || 0) + '점' + (m.kind === 'trial' ? ' · 체험 연장 ' + (m.ext || 0) + '/2' : '') + '</div></div>' +
           (self || m.kind === 'admin' || (!admin && (m.kind === 'op')) ? '' : '<button class="sm" type="button" data-mg="' + i + '">관리</button>') + '</div>' + (open === i ? panel(m, i) : '') + '</div>';
       }
       function shown() {
@@ -122,15 +127,15 @@
       function draw() {
         var on = list.filter(function (m) { return m.online; }).length, pend = list.filter(function (m) { return m.pendingPay; }).length;
         root.innerHTML = '<div class="scr">' + ui.hdr('회원 관리') + '<div class="bd">' +
-          '<div class="sumg"><div><b>' + on + '</b>접속 중</div><div><b>' + (seats.cap ? seats.used + '/' + seats.cap : seats.used) + '</b>좌석 사용</div><div><b>' + seats.waiting + '</b>대기</div></div>' +
+          '<div class="sumg"><div><b>' + on + '</b>접속 중</div><div><b>' + (seats.cap ? seats.used + '/' + seats.cap : seats.used) + '</b>동시 접속</div><div><b>' + seats.waiting + '</b>대기</div></div>' +
           (admin && pend ? '<button class="btn" id="gopay" type="button" style="margin-bottom:10px">입금 확인 대기 ' + pend + '건 보기</button>' : '') +
-          (admin ? '<div class="seg" id="brf" style="margin-bottom:10px;flex-wrap:wrap">' + [['', '모든 지점']].concat(brs.map(function (b) { return [b.code, b.name]; })).concat([['_staff', '운영진']]).map(function (f) { return '<button type="button" data-b="' + esc(f[0]) + '" class="' + (brF === f[0] ? 'on' : '') + '" style="font-size:14px">' + esc(f[1]) + '</button>'; }).join('') + '</div>' : '') +
+          (admin ? '<div class="seg" id="brf" style="margin-bottom:10px;flex-wrap:wrap">' + [['', '모든 매장']].concat(brs.map(function (b) { return [b.code, b.name]; })).concat([['_staff', '운영진']]).map(function (f) { return '<button type="button" data-b="' + esc(f[0]) + '" class="' + (brF === f[0] ? 'on' : '') + '" style="font-size:14px">' + esc(f[1]) + '</button>'; }).join('') + '</div>' : '') +
           '<div class="blk"><h4>새 계정 만들기</h4><label class="lbl" for="nn" style="margin-top:0">닉네임 (한글·영문·숫자 2~8자)</label><input class="inp" id="nn" maxlength="8" autocomplete="off" placeholder="예: 다람쥐"><div class="msg" id="nnE" role="alert"></div>' +
           (admin ? '<label class="lbl">회원 종류</label><div class="seg" id="kind">' + [['trial', '체험'], ['month', '월간'], ['year', '연간'], ['op', '운영자']].map(function (k) { return '<button type="button" data-k="' + k[0] + '" class="' + (kind === k[0] ? 'on' : '') + '">' + k[1] + '</button>'; }).join('') + '</div>'
-            : '<p class="hint">운영자는 <b>체험회원</b>만 만들 수 있어요. 기본 지점은 <b>' + esc(S.user.homeName || '') + '</b>이에요.</p>') +
-          (admin ? '<label class="lbl" for="nh">기본 지점</label><select class="inp" id="nh">' + brs.filter(function (b) { return b.active; }).map(function (b) { return '<option value="' + esc(b.code) + '"' + (b.code === newHome ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') + '</select>' : '') +
-          '<p class="hint">' + (kind === 'trial' ? '체험회원: 오늘부터 5일 · 하루씩 2번까지 늘릴 수 있어요. 한 사람당 한 번만 만들어 주세요.' : kind === 'op' ? '운영자: 기본 지점 회원의 체험 만들기·연장, 비밀번호 다시 만들기, 그 지점 문의 답변·공지. 비밀번호는 6자리예요.' : KIND[kind] + ': 오늘부터 ' + (kind === 'month' ? 30 : 365) + '일') + ' 처음 비밀번호는 자동으로 만들어져요. 닉네임은 모든 지점에서 하나뿐이어야 해요.</p><button class="btn" id="mk" type="button">계정 만들기</button>' + resultCard() + '</div>' +
-          '<input class="inp" id="mq" type="search" placeholder="닉네임 찾기" value="' + esc(q) + '" style="height:48px;margin-bottom:8px"><div class="seg" id="flt" style="margin-bottom:6px">' + [['all', '전체'], ['on', '접속 중'], ['new', '새 가입'], ['pay', '입금 대기'], ['exp', '기간 끝남']].concat(admin ? [['stale', '정리 대상']] : []).map(function (f) { return '<button type="button" data-f="' + f[0] + '" class="' + (filt === f[0] ? 'on' : '') + '" style="font-size:14px">' + f[1] + '</button>'; }).join('') + '</div>' +
+            : '<p class="hint">운영자는 <b>체험회원</b>만 만들 수 있어요. 기본 매장은 <b>' + esc(S.user.homeName || '') + '</b>이에요.</p>') +
+          (admin ? '<label class="lbl" for="nh">기본 매장</label><select class="inp" id="nh">' + brs.filter(function (b) { return b.active; }).map(function (b) { return '<option value="' + esc(b.code) + '"' + (b.code === newHome ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') + '</select>' : '') +
+          '<p class="hint">' + (kind === 'trial' ? '체험회원: 오늘부터 5일 · 하루씩 2번까지 늘릴 수 있어요. 한 사람당 한 번만 만들어 주세요.' : kind === 'op' ? '운영자: 기본 매장 회원의 체험 만들기·연장, 비밀번호 다시 만들기, 그 매장 문의 답변·공지. 비밀번호는 6자리예요.' : KIND[kind] + ': 오늘부터 ' + (kind === 'month' ? 30 : 365) + '일') + ' 처음 비밀번호는 자동으로 만들어져요. 닉네임은 모든 매장에서 하나뿐이어야 해요.</p><button class="btn" id="mk" type="button">계정 만들기</button>' + resultCard() + '</div>' +
+          '<input class="inp" id="mq" type="search" placeholder="닉네임 찾기" value="' + esc(q) + '" style="height:48px;margin-bottom:8px"><div class="seg flt" id="flt" style="margin-bottom:6px">' + [['all', '전체'], ['on', '접속 중'], ['new', '새 가입'], ['pay', '입금 대기'], ['exp', '기간 끝남']].concat(admin ? [['stale', '정리 대상']] : []).map(function (f) { return '<button type="button" data-f="' + f[0] + '" class="' + (filt === f[0] ? 'on' : '') + '" style="font-size:14px">' + f[1] + '</button>'; }).join('') + '</div>' +
           '<div class="hint" style="margin:6px 0">' + (admin ? '' : esc(S.user.homeName || '') + ' ') + '회원 ' + shown().length + '명</div><div id="ml">' + shown().map(function (x) { return memRow(x[0], x[1]); }).join('') + '</div>' +
           '<button class="sm" id="rf" type="button" style="margin-top:10px">새로고침</button></div>' + ui.tabs('members') + '</div>';
         $$('#kind button').forEach(function (b) { b.onclick = function () { kind = b.dataset.k; keep(); }; });
@@ -156,7 +161,8 @@
           if (m.kind === 'month' || m.kind === 'year') h += b('extend', '30', '기간 30일 늘리기') + b('extend', '365', '기간 365일 늘리기');
         }
         h += b('trust', '', '신뢰도 보기 (' + (m.trust || 0) + '점)') + b('pin', '', '비밀번호 다시 만들기');
-        if (admin) h += b('home', '', '기본 지점 바꾸기 (지금 ' + (m.homeName || '-') + ')') + b('rename', '', '닉네임 정리 (닉네임 확인 요청 처리)');
+        if (admin) h += b('home', '', '기본 매장 바꾸기 (지금 ' + (m.homeName || '-') + ')') + b('rename', '', '닉네임 정리 (닉네임 확인 요청 처리)');
+        if (admin && m.canRef) h += b('ref', '', '추천인 정하기 (지금 ' + (m.refNick || '없음') + ')');
         if (!admin && m.kind === 'trial') h += b('active', m.active ? '0' : '1', m.active ? '이용 중지 (장난 가입 등)' : '이용 다시 시작');
         if (admin) {
           h += b('active', m.active ? '0' : '1', m.active ? '이용 중지' : '이용 다시 시작');
@@ -173,7 +179,7 @@
         if (!/^[가-힣A-Za-z0-9]{2,8}$/.test(nick)) { e.textContent = '닉네임은 한글·영문·숫자 2~8자로 적어 주세요. (띄어쓰기 없이)'; $('#nn').classList.add('bad'); return; }
         var k = admin ? kind : 'trial';
         var home = admin ? newHome : S.user.home;
-        if (k === 'op' && !(await ui.confirm(nick + '님을 ' + LZ.brName(home) + ' 운영자로 만들까요?', '운영자는 이 지점이 기본 지점인 회원의 체험을 만들고 늘릴 수 있고, 이 지점 문의 답변과 공지를 쓸 수 있어요.', '만들기'))) return;
+        if (k === 'op' && !(await ui.confirm(nick + '님을 ' + LZ.brName(home) + ' 운영자로 만들까요?', '운영자는 이 매장이 기본 매장인 회원의 체험을 만들고 늘릴 수 있고, 이 매장 문의 답변과 공지를 쓸 수 있어요.', '만들기'))) return;
         ui.busy(true, '계정을 만들고 있어요…');
         try {
           var r = await LZ.api('mCreate', { nick: nick, kind: k, home: home }, { retry: 0 });
@@ -191,13 +197,18 @@
         if (a === 'del') { del = i; return keep(); } if (a === 'delno') { del = null; return keep(); }
         if (a === 'trust') { LZ.guard = null; return LZ.go('trust', { uid: m.uid, nick: m.nick }); }
         var body = { uid: m.uid, op: a };
+        if (a === 'ref') {
+          var fv = await ui.dialog({ title: m.nick + '님 추천인', body: '"친구 소개로 왔어요"처럼 링크 없이 가입한 분의 추천인을 정해요. 첫 결제 전까지만 정할 수 있고, 첫 결제를 승인하면 추천인에게 보상이 가요.\n비우고 저장하면 추천인을 지워요.', html: '<input class="inp" maxlength="8" placeholder="추천인 닉네임" value="' + esc(m.refNick || '') + '" style="margin-bottom:12px">', cancel: null, collect: true,
+            buttons: [{ label: '저장', kind: 'y', value: 'ok' }, { label: '취소', kind: 'g', value: null }] });
+          if (!fv || fv.v !== 'ok') return; body.to = fv.val.trim();
+        }
         if (a === 'rename') {
           var rv = await ui.dialog({ title: m.nick + '님 닉네임 정리', body: '닉네임을 다른 분이 먼저 차지했다는 확인 요청을 처리할 때 써요. 바꾸면 예전 닉네임은 바로 다른 분이 쓸 수 있어요.', html: '<input class="inp" maxlength="8" placeholder="새 닉네임" style="margin-bottom:12px">', cancel: null, collect: true,
             buttons: [{ label: '바꾸기', kind: 'y', value: 'ok' }, { label: '취소', kind: 'g', value: null }] });
           if (!rv || rv.v !== 'ok' || !rv.val.trim()) return; body.to = rv.val.trim();
         }
         if (a === 'home') {
-          var pick = await ui.dialog({ title: m.nick + '님 기본 지점', body: '지금: ' + (m.homeName || '-') + (ui.isStaff(m) ? '\n운영자는 기본 지점의 회원·문의·공지를 맡아요.' : '\n이 회원을 관리하는 운영자가 바뀌어요.'), cancel: null,
+          var pick = await ui.dialog({ title: m.nick + '님 기본 매장', body: '지금: ' + (m.homeName || '-') + (ui.isStaff(m) ? '\n운영자는 기본 매장의 회원·문의·공지를 맡아요.' : '\n이 회원을 관리하는 운영자가 바뀌어요.'), cancel: null,
             buttons: brs.filter(function (x) { return x.active && x.code !== m.home; }).map(function (x) { return { label: x.name + '(으)로', kind: 'y', value: x.code }; }).concat([{ label: '취소', kind: 'g', value: null }]) });
           if (!pick) return; body.br = pick;
         }
@@ -212,10 +223,10 @@
           var r = await LZ.api('mUpdate', body, { retry: 0 }); ui.busy(false);
           if (body.op === 'delete') { list.splice(i, 1); open = null; del = null; ui.toast(m.nick + '님 계정을 지웠어요'); }
           else {
-            var keepX = { online: m.online, seenAt: m.seenAt, courses: m.courses, pendingPay: m.pendingPay, trust: m.trust };
+            var keepX = { online: m.online, seenAt: m.seenAt, courses: m.courses, pendingPay: m.pendingPay, trust: m.trust, sameDev: m.sameDev, stale: m.stale, canRef: m.canRef, refPaid: m.refPaid, refNick: body.op === 'ref' ? body.to : m.refNick };
             list[i] = Object.assign(r.member, keepX);
             if (body.op === 'pin') { result = { nick: m.nick, pin: r.pin, home: m.home, staff: ui.isStaff(m), title: m.nick + '님 비밀번호를 다시 만들었어요.' }; open = null; }
-            else ui.toast(body.op === 'trialExt' ? '체험을 ' + u.ymd(r.member.end) + '까지 늘렸어요' : body.op === 'home' ? '기본 지점을 ' + r.member.homeName + '(으)로 바꿨어요' : body.op === 'rename' ? '닉네임을 "' + r.member.nick + '"(으)로 바꿨어요' : '바꿨어요', 3000);
+            else ui.toast(body.op === 'trialExt' ? '체험을 ' + u.ymd(r.member.end) + '까지 늘렸어요' : body.op === 'home' ? '기본 매장을 ' + r.member.homeName + '(으)로 바꿨어요' : body.op === 'rename' ? '닉네임을 "' + r.member.nick + '"(으)로 바꿨어요' : body.op === 'ref' ? (body.to ? '추천인을 ' + body.to + '님으로 정했어요' : '추천인을 지웠어요') : '바꿨어요', 3000);
           }
           LZ.cache.courses = null; keep();
           if (result && body.op === 'pin') { var rc = $('#inv'); if (rc) rc.scrollIntoView({ block: 'center' }); }
@@ -230,37 +241,70 @@
   LZ.screens.payments = {
     show: async function (p, root, alive) {
       root.innerHTML = '<div class="scr">' + ui.hdr2('결제 확인 · 환불') + '<div class="bd nt">' + ui.skeleton(4) + '</div></div>';
-      var d = await LZ.api('payList', {}); if (!alive()) return;
+      var both = await Promise.all([LZ.capi('payList', {}, { fresh: 0, onFresh: LZ.fresh('payments') }), LZ.capi('refundList', {}, { fresh: 0, onFresh: LZ.fresh('payments') })]); if (!alive()) return;
+      var d = both[0], rq = both[1];
       function when(ts) { return ts ? new Date(ts).toLocaleString('ko-KR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''; }
       function draw() {
         root.innerHTML = '<div class="scr">' + ui.hdr2('결제 확인 · 환불') + '<div class="bd nt">' +
           '<div class="ban">카카오페이 내역이나 통장에서 <b>보낸 분 표시(닉네임)</b>와 금액을 확인한 뒤 승인해 주세요. 승인하면 그 회원의 이용이 바로 시작돼요.</div>' +
+          (rq.pending.length ? '<h3 style="font-size:17px;margin:12px 0 8px;color:var(--rt)">환불 신청 ' + rq.pending.length + '건</h3>' + rq.pending.map(function (x) {
+            return '<div class="paybox rfbox"><div class="t">' + esc(x.nick) + '님 · ' + esc(x.planName) + ' ' + u.won(x.paid) + ' → 환불 <b>' + u.won(x.amount) + '</b></div><div class="meta">' + esc(x.why) + '<br>신청 ' + when(x.created) + (x.reason ? ' · 사유: ' + esc(x.reason) : '') + '</div>' +
+              '<div class="acctbox"><div>' + esc(x.bank) + ' <b>' + esc(x.acct) + '</b> <button class="sm" type="button" data-cpa="' + esc(x.acct.replace(/-/g, '')) + '">복사</button></div><div>예금주 <b>' + esc(x.holder) + '</b></div></div>' +
+              '<div style="display:grid;grid-template-columns:2fr 1fr;gap:6px;margin-top:8px"><button class="btn sm2" data-rfok="' + esc(x.id) + '" type="button">보냈어요 · 환불 완료</button><button class="btn g sm2" data-rfno="' + esc(x.id) + '" type="button">반려</button></div></div>';
+          }).join('') : '') +
           '<h3 style="font-size:17px;margin:12px 0 8px">확인 대기 ' + d.pending.length + '건</h3>' +
           (d.pending.map(function (x) {
-            return '<div class="paybox"><div class="t">' + esc(x.nick) + '님 · ' + esc(x.planName) + ' ' + u.won(x.amount) + '</div><div class="meta">' + LZ.METHOD[x.method] + ' · 보낸 분 표시: <b>' + esc(x.depositor) + '</b> · ' + when(x.created) + '</div>' +
+            return '<div class="paybox"><div class="t">' + esc(x.nick) + '님 · ' + esc(x.planName) + ' ' + u.won(x.amount) + '</div><div class="meta">' + LZ.METHOD[x.method] + ' · 보낸 분 표시: <b>' + esc(x.depositor) + '</b> · ' + when(x.created) + '</div>' + refLine(x, true) +
               '<div style="display:grid;grid-template-columns:2fr 1fr;gap:6px;margin-top:8px"><button class="btn sm2" data-ok="' + esc(x.id) + '" type="button">입금 확인 · 승인</button><button class="btn g sm2" data-no="' + esc(x.id) + '" type="button">거절</button></div></div>';
           }).join('') || '<div class="ann">확인할 결제가 없어요.</div>') +
           '<h3 style="font-size:17px;margin:18px 0 8px">최근 처리</h3>' +
           (d.recent.map(function (x) {
             return '<div class="paybox"><div class="t">' + esc(x.nick) + '님 · ' + esc(x.planName) + ' ' + u.won(x.amount) + ' <span class="chip ' + (x.status === 'ok' ? 'gr' : 'r') + '">' + STATUS[x.status] + '</span></div><div class="meta">' + LZ.METHOD[x.method] + ' · ' + esc(x.depositor) + ' · 처리 ' + when(x.decided) + ' (' + esc(x.by) + ')' +
-              (x.start ? '<br>기간 ' + u.period(x.start, x.end) : '') + (x.status === 'refunded' ? '<br>환불 ' + u.won(x.refund) + ' · ' + when(x.refundAt) : '') + '</div>' +
+              (x.start ? '<br>기간 ' + u.period(x.start, x.end) : '') + (x.status === 'refunded' ? '<br>환불 ' + u.won(x.refund) + ' · ' + when(x.refundAt) : '') + '</div>' + refLine(x, false) +
               (x.status === 'ok' ? '<button class="sm" data-rf="' + esc(x.id) + '" type="button" style="margin-top:6px">환불 계산하기</button>' : '') + '</div>';
           }).join('') || '<div class="ann">아직 없어요.</div>') + '</div></div>';
         $$('[data-ok]').forEach(function (b) { b.onclick = function () { decide(b.dataset.ok, true); }; });
         $$('[data-no]').forEach(function (b) { b.onclick = function () { decide(b.dataset.no, false); }; });
         $$('[data-rf]').forEach(function (b) { b.onclick = function () { refund(b.dataset.rf); }; });
+        $$('[data-cpa]').forEach(function (b) { b.onclick = async function () { ui.toast((await u.copy(b.dataset.cpa)) ? '계좌번호를 복사했어요. 은행 앱에 붙여 넣으세요.' : '복사하지 못했어요.', 3500); }; });
+        $$('[data-rfok]').forEach(function (b) { b.onclick = function () { rfDecide(b.dataset.rfok, true); }; });
+        $$('[data-rfno]').forEach(function (b) { b.onclick = function () { rfDecide(b.dataset.rfno, false); }; });
+      }
+      function refLine(x, pending) {                                          // 추천인 표시
+        if (!x.refNick) return '';
+        if (pending) return '<div class="refl">🎁 추천인 <b>' + esc(x.refNick) + '</b>님 · ' + (x.refWill ? '승인하면 ' + esc(x.refNick) + '님에게 <b>+' + x.refWill + '일</b>' : x.refDone ? '추천 보상은 이미 받았어요' : '보상 없음(운영진이거나 보상 꺼짐)') + '</div>';
+        return '<div class="refl">🎁 추천인 <b>' + esc(x.refNick) + '</b>님' + (x.refThis ? ' · 이 결제로 <b>+' + x.refThis + '일</b> 보상' : '') + '</div>';
+      }
+      async function rfDecide(id, ok) {
+        if (working) return; var x = rq.pending.filter(function (y) { return y.id === id; })[0]; if (!x) return; working = true;
+        try {
+          var note = '';
+          if (ok) { if (!(await ui.confirm(u.won(x.amount) + '을 보내셨나요?', x.nick + '님 · ' + x.bank + ' ' + x.acct + ' (' + x.holder + ')\n은행 앱에서 보낸 뒤에 눌러 주세요.\n누르면 이 회원의 이용 기간이 신청한 날로 끝나요.', '네, 보냈어요'))) return; }
+          else {
+            var v = await ui.dialog({ title: x.nick + '님 환불 반려', body: '회원에게 보일 반려 사유를 적어 주세요.', html: '<input class="inp" maxlength="100" placeholder="예: 이용 기간이 거의 끝났어요" style="margin-bottom:12px">', cancel: null, collect: true,
+              buttons: [{ label: '반려하기', kind: 'r', value: 'ok' }, { label: '취소', kind: 'g', value: null }] });
+            if (!v || v.v !== 'ok') return; note = v.val.trim();
+          }
+          ui.busy(true, '처리하고 있어요…');
+          try { var r = await LZ.api('refundDecide', { id: id, ok: ok ? 1 : 0, note: note }, { retry: 0 }); ui.busy(false); ui.toast(ok ? x.nick + '님 환불 ' + u.won(r.amount) + ' 완료로 처리했어요.' : '반려했어요.', 5000); await reload(); }
+          catch (e) { ui.busy(false); ui.toast(ui.errText(e), 5000); reload(); }
+        } finally { working = false; }
       }
       function find(id) { return d.pending.concat(d.recent).filter(function (x) { return x.id === id; })[0]; }
-      async function reload() { d = await LZ.api('payList', {}); if (alive()) draw(); }
+      async function reload() { var b2 = await Promise.all([LZ.api('payList', {}), LZ.api('refundList', {})]); d = b2[0]; rq = b2[1]; if (alive()) draw(); }
       var working = false;                                                   // 처리 중에는 다른 단추를 눌러도 무시(두 번 처리 방지)
       async function decide(id, ok) {
         if (working) return; var x = find(id); working = true;
         try { await decide2(x, id, ok); } finally { working = false; }
       }
       async function decide2(x, id, ok) {
-        if (!(await ui.confirm(ok ? '승인할까요?' : '거절할까요?', x.nick + '님 ' + x.planName + ' ' + u.won(x.amount) + '\n보낸 분 표시: ' + x.depositor + (ok ? '\n입금을 확인했을 때만 승인해 주세요.' : '\n입금이 확인되지 않을 때 거절해요.'), ok ? '승인' : '거절', !ok))) return;
+        if (!(await ui.confirm(ok ? '승인할까요?' : '거절할까요?', x.nick + '님 ' + x.planName + ' ' + u.won(x.amount) + '\n보낸 분 표시: ' + x.depositor + (ok && x.refWill ? '\n승인하면 추천인 ' + x.refNick + '님에게 ' + x.refWill + '일을 더 줘요.' : '') + (ok ? '\n입금을 확인했을 때만 승인해 주세요.' : '\n입금이 확인되지 않을 때 거절해요.'), ok ? '승인' : '거절', !ok))) return;
         ui.busy(true, '처리하고 있어요…');
-        try { var r = await LZ.api('payDecide', { id: id, ok: ok ? 1 : 0 }, { retry: 0 }); ui.busy(false); ui.toast(ok ? x.nick + '님 ' + x.planName + ' 시작: ' + u.period(r.pay.start, r.pay.end) : '거절했어요', 5000); await reload(); }
+        try {
+          var r = await LZ.api('payDecide', { id: id, ok: ok ? 1 : 0 }, { retry: 0 }); ui.busy(false);
+          ui.toast(ok ? x.nick + '님 ' + x.planName + ' 시작: ' + u.period(r.pay.start, r.pay.end) + (r.reward ? '\n🎁 추천인 ' + r.reward.nick + '님에게 +' + r.reward.days + '일 (' + u.ymd(r.reward.end) + '까지)' : '') : '거절했어요', 6000);
+          await reload();
+        }
         catch (e) { ui.busy(false); ui.toast(ui.errText(e), 5000); reload(); }
       }
       async function refund(id) {
@@ -287,12 +331,12 @@
   LZ.screens.adminCfg = {
     show: async function (p, root, alive) {
       root.innerHTML = '<div class="scr">' + ui.hdr2('관리자 설정') + '<div class="bd nt">' + ui.skeleton(4) + '</div></div>';
-      var d = await LZ.api('adminCfg', {}); if (!alive()) return;
+      var d = await LZ.capi('adminCfg', {}); if (!alive()) return;
       var c = d.cfg;
       function f(id, label, val, attrs) { return '<label class="lbl" for="' + id + '">' + label + '</label><input class="inp" id="' + id + '" value="' + esc(val) + '" ' + (attrs || '') + '>'; }
       function draw() {
         root.innerHTML = '<div class="scr">' + ui.hdr2('관리자 설정') + '<div class="bd nt">' +
-          '<p class="hint" style="margin-top:0">요금·결제·좌석·문의·로고는 모든 지점 공통이에요. 지점 이름은 설정 → 지점 관리에서 바꿔요.</p>' +
+          '<p class="hint" style="margin-top:0">요금·결제·접속 인원·문의·로고는 모든 매장 공통이에요. 매장 이름은 설정 → 매장 관리에서 바꿔요.</p>' +
           '<div class="blk"><h4>요금</h4>' + f('pm', '월간회원 (30일) 요금, 원', c.price_month, 'inputmode="numeric"') + f('py', '연간회원 (365일) 요금, 원', c.price_year, 'inputmode="numeric"') + '</div>' +
           '<div class="blk"><h4>카카오페이 송금 QR</h4><p class="hint" style="margin-top:0">카카오페이 앱 → 송금 → "QR로 송금받기"에서 만든 QR 사진을 올리면 주소를 자동으로 읽어요. 월간·연간을 따로 만들어 금액을 넣어 두면 편해요.</p>' +
           ['month', 'year'].map(function (k) {
@@ -306,7 +350,7 @@
             f('jd', '하루 가입 한도 (서버 전체)', c.join_per_day, 'inputmode="numeric"') + '<p class="hint">한 휴대폰에서는 30일에 1번만 가입돼요. 1시간에 30건이 넘으면 잠시 마감돼요. 운영자가 만들어 주는 계정은 한도와 상관없어요.</p></div>' +
           '<div class="blk"><h4>추천 보상</h4><label class="chk"><input type="checkbox" id="ro"' + (c.ref_on ? ' checked' : '') + '> 친구가 내 링크로 가입하고 이용권을 결제하면 보상</label>' + f('rd', '보상 일수', c.ref_days, 'inputmode="numeric"') +
             '<p class="hint">친구가 처음 월간·연간을 결제(승인)할 때 한 번만 줘요. 그 결제를 환불하면 보상도 빠져요.</p></div>' +
-          '<div class="blk"><h4>동시 사용 좌석</h4>' + f('st', '좌석 수 (0 = 제한 없음)', c.seats, 'inputmode="numeric"') + '<p class="hint">지금 사용 ' + d.seats.used + '명 · 대기 ' + d.seats.waiting + '명. 좌석이 모두 차면 새로 들어오는 회원은 대기 화면에서 순서를 기다려요. 10분 동안 움직임이 없으면 좌석이 비워져요. 운영자·관리자는 기다리지 않아요. 좌석 수는 README의 부하 시험 결과로 정해 주세요.</p></div>' +
+          '<div class="blk"><h4>동시 접속 인원</h4>' + f('st', '한 번에 쓸 수 있는 인원 (0 = 제한 없음)', c.seats, 'inputmode="numeric"') + '<p class="hint">지금 사용 ' + d.seats.used + '명 · 대기 ' + d.seats.waiting + '명. 인원이 다 차면 새로 들어오는 회원은 대기 화면에서 순서를 기다려요. 10분 동안 아무것도 누르지 않으면 자리가 비워져요. 운영자·관리자는 기다리지 않아요. 알맞은 인원은 README의 부하 시험으로 정해 주세요.</p></div>' +
           '<div class="msg" id="err" role="alert"></div><button class="btn" id="save" type="button">설정 저장</button>' +
           '<div class="blk" style="margin-top:14px"><h4>로고 바꾸기 <span class="chip y">모든 회원에게 적용</span></h4>' + ['light', 'dark'].map(function (slot) {
             return '<div class="logobox" style="' + (slot === 'dark' ? 'margin-top:8px' : '') + '"><div class="tn" style="background:' + (slot === 'dark' ? '#17191E' : '#fff;border:1px solid #DDE0E8') + '"><img src="' + esc(S.logos[slot]) + '" alt=""></div><div style="flex:1;min-width:0"><div style="font-size:15px;font-weight:500">' + (slot === 'dark' ? '어두운 화면용' : '밝은 화면용') + '</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"><label class="sm" style="cursor:pointer">파일 고르기<input type="file" accept="image/png,image/jpeg,image/webp" data-slot="' + slot + '" style="display:none"></label><button class="sm" type="button" data-reset="' + slot + '">처음 로고로</button></div></div></div>';

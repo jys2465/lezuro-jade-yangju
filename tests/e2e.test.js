@@ -1,4 +1,4 @@
-// 실제 브라우저(Chromium, 휴대폰 크기)로 처음부터 끝까지 눌러 보는 시험 — v3 (통합 서버 · 지점)
+// 실제 브라우저(Chromium, 휴대폰 크기)로 처음부터 끝까지 눌러 보는 시험 — v3 (통합 서버 · 매장)
 // 실행: node tests/e2e.test.js   (스크린샷은 tests/shots/ 에 저장)
 const { chromium } = require('playwright'); const { start } = require('./e2e-server'); const assert = require('assert');
 const SH = __dirname + '/shots/'; require('fs').mkdirSync(SH, { recursive: true });
@@ -67,7 +67,7 @@ const WAKE = () => { window.__wl = { req: 0, rel: 0, active: 0 }; Object.defineP
   const A = await phone('관리자'); const pins = {};
 
   /* ───────── 관리자 ───────── */
-  await t('A1 관리자 첫 로그인(6자리) → 쉬운 번호 거절 → 6자리로 바꾸기 → 현황판, 위쪽 "📍 지점 ▾" 띠, 저장소 lz@app.', async () => {
+  await t('A1 관리자 첫 로그인(6자리) → 쉬운 번호 거절 → 6자리로 바꾸기 → 현황판, 위쪽 "📍 매장 ▾" 띠, 저장소 lz@app.', async () => {
     await A.goto('http://localhost:8801/'); await waitScr(A, 'login'); await shot(A, 'a1-login');
     assert.ok(/파크골프 공략노트/.test(await A.title()));
     await A.click('#plen'); await A.fill('#nick', '관리자'); await pad(A, srv.pin); await A.click('#go');
@@ -91,7 +91,7 @@ const WAKE = () => { window.__wl = { req: 0, rel: 0, active: 0 }; Object.defineP
     pins.op = (await text(A, '#inv')).match(/처음 비밀번호: (\d{6})/)[1];
     assert.ok(/6자리로 바꾸게/.test(await text(A, '#inv')), '운영자 안내문은 6자리');
     pins.m = await makeMember(A, '다람쥐', 'month'); pins.y = await makeMember(A, '너구리', 'year');
-    assert.ok(/\?s=yangju&u=%EB%84%88%EA%B5%AC%EB%A6%AC/.test(await text(A, '#inv')), '개인 주소(지점 포함)');
+    assert.ok(/\?s=yangju&u=%EB%84%88%EA%B5%AC%EB%A6%AC/.test(await text(A, '#inv')), '개인 주소(매장 포함)');
     const x = await text(A); assert.ok(/월간회원 · D-29/.test(x) && /연간회원 · D-364/.test(x), x.slice(0, 400));
     await shot(A, 'a2-members');
   });
@@ -306,24 +306,24 @@ const WAKE = () => { window.__wl = { req: 0, rel: 0, active: 0 }; Object.defineP
     assert.ok(g.below && g.right && +g.fw >= 500 && g.inside && g.sH < g.lh * 1.6, JSON.stringify(g));
     await shot(N, 'h6-narrow-header');
   });
-  await t('H7 지점 바꾸기: 너구리(기본 양주점) → 양주만송점, 기록은 따로·양주점 내 기록은 흐리게 참고 → 가져오기(신뢰도 없음) → 양주점으로 돌아옴', async () => {
+  await t('H7 매장 바꾸기: 너구리(기본 양주점) → 양주만송점, 기록은 따로·양주점 내 기록은 흐리게 참고 → 가져오기(신뢰도 없음) → 양주점으로 돌아옴', async () => {
     const W = await phone('너구리3');
     await W.goto('http://localhost:8801/?u=' + encodeURIComponent('너구리')); await waitScr(W, 'login'); await pad(W, '6482'); await W.click('#go'); await waitScr(W, 'courses');
     await W.click('.store [data-branch]'); await waitScr(W, 'branch');
-    assert.ok(/기본 지점/.test(await text(W, '.card:has-text("제이드 양주점")')), '기본 지점 표시'); await shot(W, 'h7-branch');
+    assert.ok(/기본 매장/.test(await text(W, '.card:has-text("제이드 양주점")')), '기본 매장 표시'); await shot(W, 'h7-branch');
     await W.click('[data-b="mansong"]'); await waitScr(W, 'courses');
     assert.ok(/📍 양주만송점/.test(await text(W, '.store')), await text(W, '.store'));
     assert.ok(/제이드 양주점 \d+홀/.test(await text(W, `.card[data-id="${cid}"]`)), '양주점 기록 칩');
     const before = trustTotal();
     await W.click(`.card[data-id="${cid}"]`); await waitScr(W, 'holes');
     assert.ok(await W.$('.blk.ref') && await W.$$eval('#ht .rw.ref', r => r.length) > 0, '양주점 내 기록(참고) 줄');
-    assert.ok(/이 지점에는 이 코스에 공개된 다른 회원 기록이 아직 없어요/.test(await text(W)), '만송점에는 다람쥐 기록 없음');
+    assert.ok(/이 매장에는 이 코스에 공개된 다른 회원 기록이 아직 없어요/.test(await text(W)), '만송점에는 다람쥐 기록 없음');
     await W.click('#impref'); await dlg(W, '모두 덮어쓰기');
     assert.ok(await waitFor(() => { const r = recsOf('너구리', 'mansong'); return r && r[1].r === 'f'; }), '만송점 기록으로 저장');
     assert.ok(recsOf('너구리', 'yangju')[1].d === 'R', '양주점 기록은 그대로');
     await sleep(400); assert.strictEqual(trustTotal(), before, '내 기록을 가져와도 신뢰도는 그대로');
     await shot(W, 'h7-ref');
-    await W.reload(); await waitScr(W, 'courses'); assert.ok(/양주만송점/.test(await text(W, '.store')), '다시 열어도 마지막 지점');
+    await W.reload(); await waitScr(W, 'courses'); assert.ok(/양주만송점/.test(await text(W, '.store')), '다시 열어도 마지막 매장');
     await W.click('.store [data-branch]'); await waitScr(W, 'branch'); await W.click('[data-b="yangju"]'); await waitScr(W, 'courses');
     assert.ok(/제이드 양주점/.test(await text(W, '.store'))); await W.close();
   });
@@ -338,7 +338,7 @@ const WAKE = () => { window.__wl = { req: 0, rel: 0, active: 0 }; Object.defineP
     await T.click('#nk'); await waitScr(T, 'nick'); assert.ok(/부터 다시 바꿀 수 있어요/.test(await text(T)));
     await T.click('[data-back]'); await waitScr(T, 'settings');
   });
-  await t('H10 현황판·지점 관리: 지점별 회원 표, 운영자는 소속 지점만(결제 금액 없음), 관리자가 새 지점(강북수유점) 추가 → 회원 지점 목록에 보임', async () => {
+  await t('H10 현황판·매장 관리: 매장별 회원 표, 운영자는 소속 매장만(결제 금액 없음), 관리자가 새 매장(강북수유점) 추가 → 회원 매장 목록에 보임', async () => {
     await A.evaluate(() => LZ.go('dash', {}, { reset: true, skipGuard: true })); await waitScr(A, 'dash');
     const x = await text(A); assert.ok(/양주만송점/.test(x) && /제이드 양주점/.test(x) && /결제/.test(x), x.slice(0, 500));
     await O.evaluate(() => LZ.go('dash', {}, { reset: true, skipGuard: true })); await waitScr(O, 'dash');
@@ -348,12 +348,12 @@ const WAKE = () => { window.__wl = { req: 0, rel: 0, active: 0 }; Object.defineP
     await A.click('#mk'); await dlg(A, '만들기'); await A.waitForFunction(() => /강북수유점/.test(document.querySelector('#app').innerText) && /\?s=suyu/.test(document.querySelector('#app').innerText));
     await shot(A, 'h10-branches');
     const yt = env.call({ a: 'login', nick: '너구리', pin: '6482' }).token;
-    assert.ok(env.call({ a: 'me' }, yt).branches.some(b => b.code === 'suyu'), '회원 지점 목록');
+    assert.ok(env.call({ a: 'me' }, yt).branches.some(b => b.code === 'suyu'), '회원 매장 목록');
     const ms = env.call({ a: 'mCreate', nick: '만송이', kind: 'month', home: 'mansong' }, admTok()); assert.ok(ms.ok);
     const om = env.call({ a: 'members' }, env.call({ a: 'login', nick: '운영자', pin: OP_PIN }).token).members.map(m => m.nick);
-    assert.ok(!om.includes('만송이') && om.includes('너구리'), '운영자는 소속 지점 회원만 ' + om.join(','));
+    assert.ok(!om.includes('만송이') && om.includes('너구리'), '운영자는 소속 매장 회원만 ' + om.join(','));
   });
-  await t('H11 예전 링크 ?s=없는지점 이어도 열림(기본 지점), 만송 회원 초대 링크 ?s=mansong 으로 만송점에서 시작', async () => {
+  await t('H11 예전 링크 ?s=없는매장 이어도 열림(기본 매장), 만송 회원 초대 링크 ?s=mansong 으로 만송점에서 시작', async () => {
     const V = await phone('옛링크'); await V.goto('http://localhost:8801/?s=uijeongbu'); await waitScr(V, 'login');
     assert.ok(/제이드 양주점/.test(await text(V, '.pill')), await text(V, '.hero'));
     const mp = env.call({ a: 'mUpdate', nick: '만송이', op: 'pin' }, admTok()).pin;
@@ -396,7 +396,8 @@ const WAKE = () => { window.__wl = { req: 0, rel: 0, active: 0 }; Object.defineP
     await O.keyboard.press('Control+A'); await O.click('.rtb [data-x="big"]'); await O.click('#send');
     await O.waitForFunction(() => document.querySelectorAll('.msgb').length === 2);
     await QY.evaluate(() => LZ.go('courses', {}, { reset: true, skipGuard: true })); await waitScr(QY, 'courses');
-    assert.ok(/운영진 답변이 도착했어요/.test(await text(QY)), '코스 화면 띠'); assert.strictEqual(await text(QY, '[data-tab="settings"] .bdg'), String(1 + await QY.evaluate(() => LZ.noticeUnread())), '답변 1 + 안 읽은 공지');
+    await QY.waitForFunction(() => /운영진 답변이 도착했어요/.test(document.querySelector('#app').innerText), null, { timeout: 12000 });   // 뒤에서 받아 오면 띠가 생김
+    assert.strictEqual(await text(QY, '[data-tab="settings"] .bdg'), String(1 + await QY.evaluate(() => LZ.noticeUnread())), '답변 1 + 안 읽은 공지');
     await QY.click('[data-qna]'); await waitScr(QY, 'qna'); await QY.click(`[data-q2="${qid}"]`); await waitScr(QY, 'qnaView');
     assert.ok(/운영진 답변/.test(await text(QY, '.thread')) && /big/.test(await QY.$eval('.msgb.st .rich', e => e.innerHTML)));
     await shot(QY, 'q3-thread');
@@ -428,19 +429,19 @@ const WAKE = () => { window.__wl = { req: 0, rel: 0, active: 0 }; Object.defineP
     assert.ok(srv.env.call({ a: 'setCfg', qna_mode: 'on' }, admTok()).ok);
     await T.reload(); await waitScr(T, 'courses'); await T.click('[data-tab="settings"]'); await waitScr(T, 'settings'); assert.ok(await T.$('#qna'));
   });
-  await t('H9 공지: 관리자가 모든 지점 팝업 공지(굵게) → 회원이 앱을 열면 팝업 한 번 → 다시 열면 안 뜸, 공지 목록', async () => {
+  await t('H9 공지: 관리자가 모든 매장 팝업 공지(굵게) → 회원이 앱을 열면 팝업 한 번 → 다시 열면 안 뜸, 공지 목록', async () => {
     await A.evaluate(() => LZ.go('notices', { manage: 1 }, { reset: true, skipGuard: true })); await waitScr(A, 'notices');
     await A.click('#new'); await waitScr(A, 'noticeEdit');
     await A.fill('#nt', '센서 점검 안내'); await A.click('.red'); await A.keyboard.type('토요일 오전 점검');
     await A.keyboard.press('Control+A'); await A.click('.rtb [data-x="b"]'); await A.check('#nq'); await A.check('#np');
-    await A.click('#save'); await waitScr(A, 'notices'); assert.ok(/센서 점검 안내/.test(await text(A)) && /모든 지점/.test(await text(A)));
+    await A.click('#save'); await waitScr(A, 'notices'); assert.ok(/센서 점검 안내/.test(await text(A)) && /모든 매장/.test(await text(A)));
     await T.reload(); await T.waitForSelector('.dlg'); assert.ok(/센서 점검 안내/.test(await text(T, '.dlg')) && /<b>/.test(await T.$eval('.dlg .rich', e => e.innerHTML)));
     await shot(T, 'h9-popup'); await dlg(T, '확인');
     await T.reload(); await waitScr(T, 'courses'); await sleep(500); assert.ok(!(await T.$('.dlg')), '두 번째에는 팝업 없음');
     await T.click('[data-tab="settings"]'); await waitScr(T, 'settings'); await T.click('#nts'); await waitScr(T, 'notices');
     assert.ok(/📌/.test(await text(T)) && /센서 점검 안내/.test(await text(T)));
     const op = env.call({ a: 'login', nick: '운영자', pin: OP_PIN }).token;
-    assert.strictEqual(env.call({ a: 'noticeSave', br: 'mansong', title: '남의 지점', html: 'x' }, op).err, 'perm', '운영자는 다른 지점 공지 불가');
+    assert.strictEqual(env.call({ a: 'noticeSave', br: 'mansong', title: '남의 매장', html: 'x' }, op).err, 'perm', '운영자는 다른 매장 공지 불가');
   });
   /* ───────── v3.1: 직접 가입 · 친구 초대 · 공지 그림/단추 · 포스터 ───────── */
   let JN = null;
@@ -474,14 +475,14 @@ const WAKE = () => { window.__wl = { req: 0, rel: 0, active: 0 }; Object.defineP
     await I.evaluate(() => LZ.go('settings', {}, { reset: true, skipGuard: true })); await waitScr(I, 'settings'); await I.click('#invt'); await waitScr(I, 'invite');
     const link = await text(I, '#lk'); assert.ok(/\?s=yangju&join=1&r=u\d+/.test(link), link); await shot(I, 'j3-invite');
     const F = await phone('초대친구'); await F.goto(link.replace(/^https?:\/\/[^/]+\//, 'http://localhost:8801/')); await waitScr(F, 'join');
-    assert.ok(/친구 초대 링크/.test(await text(F)));
+    await F.waitForFunction(() => /너구리.*님의 초대/.test(document.querySelector('#refb').innerText)); await shot(F, 'j3-join-ref');
     await F.fill('#jn', '초대친구'); await F.waitForFunction(() => /쓸 수 있는/.test(document.querySelector('#jnE').textContent)); await pad(F, '3691'); await sleep(60); await pad(F, '3691'); await F.check('#jag'); await F.click('#go'); await waitScr(F, 'guide');
     const ft = env.call({ a: 'login', nick: '초대친구', pin: '3691' }).token, before = env.call({ a: 'me' }, env.call({ a: 'login', nick: '너구리', pin: '6482' }).token).user.end;
     const pr = env.call({ a: 'payReq', plan: 'month', method: 'kakao' }, ft); assert.ok(pr.ok, JSON.stringify(pr));
     const dc = env.call({ a: 'payDecide', id: pr.pending.id, ok: 1 }, admTok()); assert.ok(dc.reward && dc.reward.days === 7, JSON.stringify(dc));
     const after = env.call({ a: 'me' }, env.call({ a: 'login', nick: '너구리', pin: '6482' }).token).user.end; assert.strictEqual(Date.parse(after) - Date.parse(before), 7 * DAY);
     await I.evaluate(() => LZ.go('invite', {}, { replace: true, skipGuard: true })); await waitScr(I, 'invite');
-    assert.ok(/초대친구/.test(await text(I)) && /\+7일 받음/.test(await text(I)), await text(I)); await I.close(); await F.close();
+    await I.waitForFunction(() => /초대친구/.test(document.querySelector('#app').innerText) && /\+7일 받음/.test(document.querySelector('#app').innerText), null, { timeout: 12000 }); await I.close(); await F.close();
   });
   await t('J4 공지에 사진·단추: 관리자가 사진 올리고 단추 2개(앱: 친구에게 알리기, https 주소)와 본문 주소 → 회원 공지에 사진·눌리는 주소·단추 → 단추로 친구 초대 화면', async () => {
     await A.evaluate(() => LZ.go('notices', { manage: 1 }, { reset: true, skipGuard: true })); await waitScr(A, 'notices'); await A.click('#new'); await waitScr(A, 'noticeEdit');
@@ -505,7 +506,7 @@ const WAKE = () => { window.__wl = { req: 0, rel: 0, active: 0 }; Object.defineP
     await shot(W, 'j5-promo'); await dlg(W, '친구에게 알리기'); await waitScr(W, 'invite');
     await W.click('#pv'); await waitScr(W, 'join'); assert.ok(/미리 보기/.test(await text(W)) && await W.$eval('#go', b => b.disabled)); await W.close();
   });
-  await t('J6 가입 QR 포스터: 매장 고르기 → A4 그림(QR 안 주소는 ?s=지점&join=1) → 그림 저장 단추, 회원 관리에 "직접 가입"·"NEW" 표시, 운영자는 체험 이용 중지 가능', async () => {
+  await t('J6 가입 QR 포스터: 매장 고르기 → A4 그림(QR 안 주소는 ?s=매장&join=1) → 그림 저장 단추, 회원 관리에 "직접 가입"·"NEW" 표시, 운영자는 체험 이용 중지 가능', async () => {
     await A.evaluate(() => LZ.go('settings', {}, { reset: true, skipGuard: true })); await waitScr(A, 'settings'); await A.click('#pst'); await waitScr(A, 'poster');
     await A.waitForSelector('#pimg'); await A.selectOption('#pb', 'mansong'); await A.waitForFunction(() => /양주만송점/.test(document.querySelector('#pimg').alt));
     assert.ok(/^data:image\/png/.test(await A.getAttribute('#dl', 'href')));
@@ -516,14 +517,53 @@ const WAKE = () => { window.__wl = { req: 0, rel: 0, active: 0 }; Object.defineP
     assert.strictEqual(env.call({ a: 'mUpdate', uid: f.uid, op: 'active', on: 0 }, op).err, 'perm', '월간이 된 회원은 운영자가 못 멈춤');
     const tr = env.call({ a: 'members' }, admTok()).members.find(m => m.nick === '새싹이');
     const opM = env.call({ a: 'mCreate', nick: '만송운영', kind: 'op', home: 'mansong' }, admTok()); const ot = env.call({ a: 'login', nick: '만송운영', pin: opM.pin }).token; env.call({ a: 'pin', pin: '864213' }, ot);
-    assert.ok(env.call({ a: 'mUpdate', uid: tr.uid, op: 'active', on: 0 }, ot).ok, '소속 지점 체험회원 이용 중지');
+    assert.ok(env.call({ a: 'mUpdate', uid: tr.uid, op: 'active', on: 0 }, ot).ok, '소속 매장 체험회원 이용 중지');
   });
   await t('J7 카카오톡 미리보기 카드: og 제목·설명·그림(1200×630) 태그와 그림 파일', async () => {
     const html = await (await fetch('http://localhost:8801/index.html')).text();
-    assert.ok(/og:title" content="파크골프 공략노트/.test(html) && /og:image" content="assets\/og-card\.jpg/.test(html));
+    assert.ok(/og:title" content="파크골프 공략노트/.test(html) && /og:image" content="https:\/\/jys2465\.github\.io\/lezuro-jade-yangju\/assets\/og-card\.jpg/.test(html) && /og:url" content="https:\/\/jys2465\.github\.io\/lezuro-jade-yangju\//.test(html));
     const r = await fetch('http://localhost:8801/assets/og-card.jpg'); assert.strictEqual(r.status, 200);
   });
-  await t('H3 없는 지점 코드로 보내면 서버가 거절', async () => {
+  await t('J8 추천인: 링크 없이 가입한 회원에게 관리자가 추천인(너구리) 정하기 → 회원 관리 "추천: 너구리" → 결제 확인 화면 "승인하면 너구리님에게 +7일" → 승인하면 알림, 이후 추천인 바꾸기 단추 없음', async () => {
+    const r = env.call({ a: 'join', nick: '소개받음', pin: '2580', br: 'yangju', agree: 1, dev: '9a'.repeat(16) }); assert.ok(r.ok);
+    await A.evaluate(() => LZ.go('members', {}, { reset: true, skipGuard: true })); await waitScr(A, 'members');
+    await A.click('.mem:has-text("소개받음") [data-mg]'); await A.click('.mp [data-a="ref"]');
+    await A.waitForSelector('.dlg input'); await A.fill('.dlg input', '너구리'); await dlg(A, '저장');
+    await A.waitForFunction(() => /추천: 너구리/.test(document.querySelector('#ml').innerText));
+    const pr = env.call({ a: 'payReq', plan: 'year', method: 'bank' }, r.token); assert.ok(pr.ok);
+    await A.evaluate(() => LZ.go('payments', {}, { skipGuard: true })); await waitScr(A, 'payments');
+    const box = await text(A, '.paybox:has-text("소개받음")'); assert.ok(/추천인 너구리님/.test(box) && /승인하면 너구리님에게 \+7일/.test(box), box); await shot(A, 'j8-payments');
+    await A.click('.paybox:has-text("소개받음") [data-ok]'); await A.waitForSelector('.dlg'); assert.ok(/너구리님에게 7일/.test(await text(A, '.dlg'))); await dlg(A, '승인');
+    await A.waitForFunction(() => /추천인 너구리님에게 \+7일/.test(document.querySelector('#toast').textContent));
+    await A.evaluate(() => LZ.go('members', {}, { reset: true, skipGuard: true })); await waitScr(A, 'members');
+    await A.click('.mem:has-text("소개받음") [data-mg]'); assert.ok(!(await A.$('.mp [data-a="ref"]')), '첫 결제 뒤에는 추천인 정하기 없음');
+    assert.ok(/추천: 너구리 ✓/.test(await text(A, '.mem:has-text("소개받음")')));
+  });
+  await t('J9 환불 신청: 회원이 설정 → 환불 신청(은행·계좌·예금주) → 내 화면에는 번호 일부 * → 관리자 결제 확인 화면에 전체 번호·복사 → "보냈어요" → 회원에게 "환불 ○원을 보냈어요"(가린 번호)', async () => {
+    const j = env.call({ a: 'join', nick: '환불회원', pin: '2580', br: 'yangju', agree: 1, dev: '7b'.repeat(16) });
+    const pr = env.call({ a: 'payReq', plan: 'month', method: 'kakao' }, j.token); assert.ok(env.call({ a: 'payDecide', id: pr.pending.id, ok: 1 }, admTok()).ok);
+    const R = await phone('환불회원'); await R.goto('http://localhost:8801/?u=' + encodeURIComponent('환불회원')); await waitScr(R, 'login'); await pad(R, '2580'); await R.click('#go'); await waitScr(R, 'courses'); await dismiss(R);
+    await R.evaluate(() => LZ.go('settings', {}, { reset: true, skipGuard: true })); await waitScr(R, 'settings'); await R.click('#rfd'); await waitScr(R, 'refund');
+    assert.ok(/1,000원/.test(await text(R)) && /전액/.test(await text(R)));
+    await R.selectOption('#rb', '카카오뱅크'); await R.fill('#ra', '3333-05-8835107'); await R.fill('#rh', '주영수'); await R.click('#rgo');
+    assert.ok(/체크/.test(await text(R, '#err'))); await R.check('#rag'); await R.click('#rgo'); await dlg(R, '신청하기');
+    await R.waitForFunction(() => /확인 중/.test(document.querySelector('#app').innerText));
+    const x = await text(R); assert.ok(/333\*-\*\*-\*\*\*\*107/.test(x) && /주\*수/.test(x) && !/8835107/.test(x), '내 화면은 가림 ' + x.slice(0, 300)); await shot(R, 'j9-refund-member');
+    await A.evaluate(() => LZ.go('dash', {}, { reset: true, skipGuard: true })); await waitScr(A, 'dash'); assert.ok(/환불 신청/.test(await text(A, '.kpi')));
+    await A.evaluate(() => LZ.go('payments', {}, { skipGuard: true })); await waitScr(A, 'payments');
+    const box = await text(A, '.rfbox'); assert.ok(/3333-05-8835107/.test(box) && /주영수/.test(box) && /환불회원/.test(box), box); await shot(A, 'j9-refund-admin');
+    await A.click('.rfbox [data-rfok]'); await dlg(A, '네, 보냈어요'); await A.waitForFunction(() => /환불 1,000원 완료/.test(document.querySelector('#toast').textContent));
+    assert.ok(!(await A.$('.rfbox')), '처리하면 목록에서 빠짐');
+    await R.reload(); await waitScr(R, 'courses'); await dismiss(R);
+    assert.ok(/환불 1,000원을 카카오뱅크 333\*-\*\*-\*\*\*\*107 계좌로 보냈어요/.test(await text(R)), await text(R, '.bd'));
+    const sh = env.ss.getSheetByName('환불신청'); let full = false; for (let r = 2; r <= sh.getLastRow(); r++) if (/8835107/.test(sh.getRange(r, 7).getValue())) full = true; assert.ok(!full, '시트에도 전체 번호 없음');
+    /* 로그아웃: 설정이 아닌 화면에서도 위쪽 단추로 */
+    await R.click(`.card[data-id="${cid}"]`); await waitScr(R, 'holes'); assert.ok(await R.$('.hd2 [data-logout]'), '안쪽 화면에도 로그아웃 단추');
+    await R.click('.hd2 [data-logout]'); await dlg(R, '로그아웃'); await waitScr(R, 'login'); assert.ok(!(await R.$('[data-logout]')), '로그인 화면에는 없음');
+    assert.strictEqual(await R.evaluate(() => localStorage.getItem('lz@app.t')), null);
+    await R.close();
+  });
+  await t('H3 없는 매장 코드로 보내면 서버가 거절', async () => {
     const r = await A.evaluate(async () => { const res = await fetch(LZ.API, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ a: 'me', t: LZ.S.token, br: 'uijeongbu' }) }); return res.json(); });
     assert.strictEqual(r.err, 'branch');
   });

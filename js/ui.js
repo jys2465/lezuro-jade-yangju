@@ -81,23 +81,27 @@
       ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/></svg>'
       : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>';
   };
+  /* 로그아웃 단추: 로그인했을 때 모든 화면 위쪽(해·달 단추 옆) */
+  ui.outBtn = function () {
+    return LZ.S.user ? '<button type="button" class="thm outb" data-logout aria-label="로그아웃" title="로그아웃"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M10 16l-4-4 4-4M6 12h10"/></svg><i>로그아웃</i></button>' : '';
+  };
   ui.themeBtn = function () { var d = T.isDark(); return '<button type="button" class="thm" data-thm aria-label="' + (d ? '밝은 화면으로 바꾸기' : '어두운 화면으로 바꾸기') + '">' + ui.themeIcon() + '</button>'; };
 
   /* 로고: 화면 모드에 맞는 그림(어두운 화면이면 dark) */
   ui.logoSrc = function () { return LZ.S.logos[T.isDark() ? 'dark' : 'light'] || LZ.S.logos.light; };
   ui.logo = function () { return '<img data-logo src="' + esc(ui.logoSrc()) + '" alt="파크골프 공략노트">'; };
-  /* 지점 띠: 모든 화면 위쪽에 지금 지점(누르면 지점 바꾸기) */
+  /* 매장 띠: 모든 화면 위쪽에 지금 매장(누르면 매장 바꾸기) */
   ui.band = function (sub) {
-    var nm = LZ.S.store || '지점';
-    return '<div class="store"><button type="button" class="brb" data-branch aria-label="지금 지점 ' + esc(nm) + ', 눌러서 지점 바꾸기"><b>📍 ' + esc(nm) + '</b><i aria-hidden="true">▾</i></button><span>' + esc(sub || '파크골프 공략노트') + '</span></div>';
+    var nm = LZ.S.store || '매장';
+    return '<div class="store"><button type="button" class="brb" data-branch aria-label="지금 매장 ' + esc(nm) + ', 눌러서 매장 바꾸기"><b>📍 ' + esc(nm) + '</b><i aria-hidden="true">▾</i></button><span>' + esc(sub || '매장 바꾸기') + '</span></div>';
   };
   ui.hdr = function (sub) {
-    return '<header class="hd">' + ui.logo() + '<div class="rt"><div class="who">' + ui.tag(LZ.S.user) + '</div>' + ui.themeBtn() + '</div></header>' + ui.band(sub);
+    return '<header class="hd">' + ui.logo() + '<div class="rt"><div class="who">' + ui.tag(LZ.S.user) + '</div>' + ui.themeBtn() + ui.outBtn() + '</div></header>' + ui.band(sub);
   };
   /* 안쪽 화면 머리글: ← 버튼, 제목, 오른쪽 문구 */
   ui.hdr2 = function (title, right, noBack) {
     return '<header class="hd2">' + (noBack ? '<span style="width:12px"></span>' : '<button class="bk" data-back aria-label="뒤로">←</button>') +
-      '<span class="ttl">' + esc(title) + '</span>' + (right || '') + ui.themeBtn() + '<span style="width:6px"></span></header>' + (LZ.S.user ? ui.band() : '');
+      '<span class="ttl">' + esc(title) + '</span>' + (right || '') + ui.themeBtn() + ui.outBtn() + '<span style="width:6px"></span></header>' + (LZ.S.user ? ui.band() : '');
   };
 
   var ICON = {

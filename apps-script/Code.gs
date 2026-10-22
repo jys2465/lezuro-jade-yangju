@@ -1,13 +1,13 @@
 /**
  * 파크골프 공략노트 — 통합 서버 (구글 앱스크립트)  v3
  *
- * 서버 하나로 모든 지점을 운영합니다. 계정·이용권·코스 목록은 전체 공통, 기록은 지점별(지점마다 센서·타격감이 달라서).
+ * 서버 하나로 모든 매장을 운영합니다. 계정·이용권·코스 목록은 전체 공통, 기록은 매장별(매장마다 센서·타격감이 달라서).
  * 처음 한 번(그리고 새 버전을 붙여 넣은 뒤 한 번) setup() 을 실행하고, 웹 앱으로 배포하세요. (README 참고)
  *
  * 등급
- *  - admin(관리자): 모든 것, 모든 지점
- *  - op(운영자): 소속 지점 하나. 그 지점이 기본 지점인 회원의 체험 만들기·연장·비밀번호, 그 지점 문의·공지
- *  - trial(체험 5일, 하루씩 최대 2번 연장. 로그인 화면에서 직접 가입하면 바로 체험 시작) · month(월간 30일) · year(연간 365일) — 이용권은 전 지점 공통
+ *  - admin(관리자): 모든 것, 모든 매장
+ *  - op(운영자): 소속 매장 하나. 그 매장이 기본 매장인 회원의 체험 만들기·연장·비밀번호, 그 매장 문의·공지
+ *  - trial(체험 5일, 하루씩 최대 2번 연장. 로그인 화면에서 직접 가입하면 바로 체험 시작) · month(월간 30일) · year(연간 365일) — 이용권은 전 매장 공통
  *
  * 원칙
  *  - 모든 권한 검사는 서버에서 합니다.
@@ -21,7 +21,7 @@ var TZ = 'Asia/Seoul';
 var SERVICE = '파크골프 공략노트';
 /** 관리자 닉네임. setup() 이 이 닉네임으로 관리자 계정을 만듭니다(이미 있으면 관리자로 바꿉니다). */
 var ADMIN_NICK = '관리자';
-/** 처음 만들어 둘 지점(코드, 이름). 예전 v2 자료는 첫 번째 지점(yangju) 기록으로 옮겨집니다. 지점은 앱 관리자 화면에서 더 만들 수 있어요. */
+/** 처음 만들어 둘 매장(코드, 이름). 예전 v2 자료는 첫 번째 매장(yangju) 기록으로 옮겨집니다. 매장은 앱 관리자 화면에서 더 만들 수 있어요. */
 var SEED_BRANCHES = [['yangju', '제이드 양주점'], ['mansong', '양주만송점']];
 var BRANCH = SEED_BRANCHES[0][0];
 /** 결제 처음 값 — 관리자 화면에서 바꿀 수 있습니다. */
@@ -63,16 +63,17 @@ var SH = {
   payments: ['id', 'uid', 'plan', 'amount', 'method', 'depositor', 'status', 'created', 'decided', 'by', 'start', 'end', 'refund', 'refundAt', 'name'],
   settings: ['key', 'val'],
   log:      ['ts', 'nick', 'act', 'info'],
-  uses:     ['owner', 'user', 'cid', 'first', 'last', 'br'],   // 신뢰도: user 가 owner 의 기록(그 지점·그 코스)을 가져다 씀 → 1점
+  uses:     ['owner', 'user', 'cid', 'first', 'last', 'br'],   // 신뢰도: user 가 owner 의 기록(그 매장·그 코스)을 가져다 씀 → 1점
   faq:      ['id', 'order', 'q', 'a', 'upd'],
   qna:      ['id', 'uid', 'cat', 'cid', 'title', 'status', 'created', 'updated', 'lastBy', 'msgs', 'seenUser', 'seenStaff', 'meta', 'br'],
   branches: ['code', 'name', 'active', 'order', 'created'],
   notices:  ['id', 'br', 'title', 'html', 'pin', 'start', 'end', 'popup', 'by', 'created', 'upd', 'img', 'btns'],
-  images:   ['id', 'part', 'data', 'created']
+  images:   ['id', 'part', 'data', 'created'],
+  refunds:  ['id', 'uid', 'pid', 'created', 'status', 'bank', 'acct', 'holder', 'reason', 'amount', 'remain', 'why', 'decided', 'by', 'note', 'name']
 };
 var TITLE = {
   users: '회원', sessions: '로그인기록', courses: '코스', records: '기록', prefs: '공개설정', payments: '결제', settings: '설정', log: '이력',
-  uses: '신뢰도', faq: '자주묻는질문', qna: '문의', branches: '지점', notices: '공지', images: '그림'
+  uses: '신뢰도', faq: '자주묻는질문', qna: '문의', branches: '지점', notices: '공지', images: '그림', refunds: '환불신청'
 };
 
 /* ───────────── 입구 ───────────── */
@@ -80,15 +81,15 @@ var TITLE = {
 function doGet() { return json_({ ok: true, app: APP, ver: VER }); }
 
 function doPost(e) {
-  var out;
+  var out; resetMemo_();
   try {
     var raw = (e && e.postData && e.postData.contents) || '';
     if (raw.length > LIM.reqMax) throw E_('big', '보내는 내용이 너무 커요');
     var q = JSON.parse(raw);
     var h = H[q.a];
     if (!h) throw E_('bad', '알 수 없는 요청이에요');
-    if (q.br === undefined && q.b) q.br = q.b;                        // 예전 화면(v2)은 지점 코드를 b 로 보냄
-    if (q.br && !findBranch_(q.br)) throw E_('branch', '없는 지점이에요. 앱을 새로 고침해 주세요.');
+    if (q.br === undefined && q.b) q.br = q.b;                        // 예전 화면(v2)은 매장 코드를 b 로 보냄
+    if (q.br && !findBranch_(q.br)) throw E_('branch', '없는 매장이에요. 앱을 새로 고침해 주세요.');
     out = h.pub ? run_(h, null, q) : authed_(h, q);
   } catch (err) {
     if (err && err.lz) out = err.body;
@@ -105,6 +106,7 @@ function run_(h, ctx, q) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) throw E_('busy', '지금 다른 분이 저장 중이에요. 잠시 뒤에 다시 해 주세요.');
   try {
+    resetMemo_();                                                           // 기다리는 동안 다른 요청이 바꾼 내용을 다시 읽음
     if (ctx && ctx.u) { var fresh = userByUid_(ctx.u.uid); if (!fresh || !fresh.active) throw E_('auth', '이 계정은 지금 쓸 수 없어요. 운영자에게 문의해 주세요.'); ctx.u = fresh; }   // 기다리는 동안 바뀐 회원 정보(결제 승인·삭제로 줄이 밀림 등)를 다시 읽음
     return h.fn(q, ctx);
   }
@@ -159,7 +161,11 @@ function okNick_(s) { return /^[가-힣A-Za-z0-9]{2,8}$/.test(s); }
 
 function ss_() { return SpreadsheetApp.getActiveSpreadsheet(); }
 var COLS_OK_ = {};
-function sheet_(name) {
+/* 한 요청 안에서 같은 시트를 여러 번 읽지 않게 기억(쓰기가 있으면 그 시트는 다시 읽음) — 화면이 빨라져요 */
+var ROWS_ = {};
+function resetMemo_() { ROWS_ = {}; }
+function sheet_(name) { delete ROWS_[name]; return sheetGet_(name); }   // 쓰려고 시트를 꺼내면 기억을 지움
+function sheetGet_(name) {
   var ss = ss_(), s = ss.getSheetByName(TITLE[name]);
   if (s) {
     if (!COLS_OK_[name]) {                                                 // 새 버전에서 칸이 늘었는데 setup 을 안 돌렸을 때도 괜찮게
@@ -177,14 +183,18 @@ function sheet_(name) {
   if (s.setFrozenRows) s.setFrozenRows(1);
   return s;
 }
-function rows_(name) { var s = sheet_(name), n = s.getLastRow(); if (n < 2) return []; return s.getRange(2, 1, n - 1, SH[name].length).getValues(); }
+function rows_(name) {
+  if (!ROWS_[name]) { var s = sheetGet_(name), n = s.getLastRow(); ROWS_[name] = n < 2 ? [] : s.getRange(2, 1, n - 1, SH[name].length).getValues(); }
+  return ROWS_[name].slice();
+}
 function append_(name, row) {
   var s = sheet_(name), r = Math.max(s.getLastRow(), 1) + 1;
   if (r > s.getMaxRows()) s.insertRowsAfter(s.getMaxRows(), Math.max(r - s.getMaxRows(), 200));
   var rng = s.getRange(r, 1, 1, SH[name].length); rng.setNumberFormat('@'); rng.setValues([row]);
+  delete ROWS_[name];
   return r;
 }
-function setRow_(name, r, row) { sheet_(name).getRange(r, 1, 1, SH[name].length).setValues([row]); }
+function setRow_(name, r, row) { sheet_(name).getRange(r, 1, 1, SH[name].length).setValues([row]); delete ROWS_[name]; }
 function rewrite_(name, keep) {
   var s = sheet_(name), n = s.getLastRow();
   if (n < 2) return 0;
@@ -193,6 +203,7 @@ function rewrite_(name, keep) {
   if (out.length === all.length) return 0;
   s.getRange(2, 1, n - 1, SH[name].length).clearContent();
   if (out.length) { var rng = s.getRange(2, 1, out.length, SH[name].length); rng.setNumberFormat('@'); rng.setValues(out); }
+  delete ROWS_[name];
   return all.length - out.length;
 }
 function log_(nick, act, info) { try { append_('log', [Date.now(), nick || '', act, String(info || '').slice(0, 300)]); } catch (e) { /* 무시 */ } }
@@ -219,7 +230,7 @@ function cfg_() {
   return o;
 }
 
-/* ───────────── 지점 ───────────── */
+/* ───────────── 매장 ───────────── */
 
 function branchOf_(r) { return { code: str_(r[0]), name: str_(r[1]), active: num_(r[2]) ? 1 : 0, order: num_(r[3]), created: num_(r[4]) }; }
 function branches_() {
@@ -232,7 +243,7 @@ function branches_() {
 function findBranch_(code) { code = String(code || '').toLowerCase(); var l = branches_(); for (var i = 0; i < l.length; i++) if (l[i].code === code) return l[i]; return null; }
 function branchName_(code) { var b = findBranch_(code); return b ? b.name : String(code || ''); }
 function firstBranch_() { var l = branches_().filter(function (b) { return b.active; }); return l.length ? l[0].code : BRANCH; }
-/** 이번 요청의 지점: 화면이 보낸 지점 → 마지막에 쓴 지점 → 기본 지점. 닫힌 지점은 관리자만 */
+/** 이번 요청의 매장: 화면이 보낸 매장 → 마지막에 쓴 매장 → 기본 매장. 닫힌 매장은 관리자만 */
 function pickBranch_(u, want) {
   var list = [want, u.lastBr, u.home, firstBranch_()];
   for (var i = 0; i < list.length; i++) { var b = list[i] && findBranch_(list[i]); if (b && (b.active || u.kind === 'admin')) return b.code; }
@@ -423,6 +434,13 @@ function aJoinCheck(q) {
   var why = nickTaken_(nick, '') || (nickKey_(nick) === nickKey_(ADMIN_NICK) ? '쓸 수 없는 닉네임이에요.' : '');
   return { ok: true, res: why ? { code: 'dupnick', msg: why } : null };
 }
+/** 초대 링크로 들어왔을 때 "○○님의 초대" 이름 보여 주기 */
+function aRefName(q) {
+  var c = cache_(), m = 'jc:' + Math.floor(Date.now() / 60000), n = num_(c.get(m)) + 1; c.put(m, String(n), 120);
+  if (n > 600) throw E_('busy', '잠시 뒤에 다시 해 주세요.');
+  var r = /^u\d{1,9}$/.test(String(q.ref || '')) ? userByUid_(String(q.ref)) : null;
+  return { ok: true, nick: r && r.active && !isStaff_(r) ? r.nick : '' };   // 운영진 이름은 보여 주지 않음
+}
 function aJoin(q) {
   var jc = joinCfg_(), now = Date.now();
   if (!jc.on) throw E_('off', '지금은 직접 가입을 받지 않아요. 매장 운영자에게 계정을 만들어 달라고 해 주세요.');
@@ -486,7 +504,7 @@ function myPending_(uid) { var r = rows_('payments'); for (var i = r.length - 1;
 function aMe(q, ctx) {
   var u = ctx.u, p = myPending_(u.uid);
   return { ok: true, user: userInfo_(u), br: ctx.br, store: branchName_(ctx.br), branches: branchList_(u.kind === 'admin'), today: today_(), pay: canPay_(u), pending: p ? payView_(p) : null,
-    trust: trustMap_()[u.uid] || 0, qnaOn: qnaOn_(u), qna: qnaBadge_(u), notices: noticeHeads_(ctx.br) };
+    trust: trustMap_()[u.uid] || 0, qnaOn: qnaOn_(u), qna: qnaBadge_(u), notices: noticeHeads_(ctx.br), refund: refundState_(u) };
 }
 function aPing() { return { ok: true }; }
 function aLogout(q, ctx) { rewrite_('sessions', function (r) { return !eq_(r[0], ctx.th); }); cache_().remove('s:' + ctx.th); freeSeat_(ctx.u.uid); return { ok: true }; }
@@ -516,18 +534,18 @@ function aSetNick(q, ctx) {
   log_(nick, '닉네임 변경', old + ' → ' + nick);
   return { ok: true, user: userInfo_(u) };
 }
-/** 기본 지점 바꾸기(회원 30일에 1번). 운영자의 소속 지점은 관리자만 바꿈 */
+/** 기본 매장 바꾸기(회원 30일에 1번). 운영자의 소속 매장은 관리자만 바꿈 */
 function aSetHome(q, ctx) {
   var u = ctx.u, b = findBranch_(q.br), now = Date.now();
-  if (!b || !b.active) throw E_('branch', '고를 수 없는 지점이에요.');
-  if (u.kind === 'op') throw E_('perm', '운영자의 소속 지점은 관리자가 바꿔요.');
+  if (!b || !b.active) throw E_('branch', '고를 수 없는 매장이에요.');
+  if (u.kind === 'op') throw E_('perm', '운영자의 소속 매장은 관리자가 바꿔요.');
   if (b.code === u.home) return { ok: true, user: userInfo_(u) };
-  if (u.kind !== 'admin' && u.homeAt && now - u.homeAt < LIM.homeEveryDays * 86400000) throw E_('soon', '기본 지점은 ' + LIM.homeEveryDays + '일에 한 번 바꿀 수 있어요. ' + Utilities.formatDate(new Date(u.homeAt + LIM.homeEveryDays * 86400000), TZ, 'M월 d일') + '부터 바꿀 수 있어요.');
+  if (u.kind !== 'admin' && u.homeAt && now - u.homeAt < LIM.homeEveryDays * 86400000) throw E_('soon', '기본 매장은 ' + LIM.homeEveryDays + '일에 한 번 바꿀 수 있어요. ' + Utilities.formatDate(new Date(u.homeAt + LIM.homeEveryDays * 86400000), TZ, 'M월 d일') + '부터 바꿀 수 있어요.');
   var old = u.home; u.home = b.code; u.homeAt = now; saveUser_(u);
-  log_(u.nick, '기본 지점 변경', branchName_(old) + ' → ' + b.name);
+  log_(u.nick, '기본 매장 변경', branchName_(old) + ' → ' + b.name);
   return { ok: true, user: userInfo_(u) };
 }
-/** 지금 쓰는 지점 기억(다음 로그인 때 그 지점으로) */
+/** 지금 쓰는 매장 기억(다음 로그인 때 그 매장으로) */
 function aUseBranch(q, ctx) {
   var u = ctx.u;
   if (u.lastBr !== ctx.br) { u.lastBr = ctx.br; sheet_('users').getRange(u.row, 21).setValue(ctx.br); }
@@ -575,7 +593,7 @@ function nameCheck_(name, list, exceptId, confirm) {
   return null;
 }
 
-/* ───────────── 코스·기록 (코스는 전체 공통, 기록은 지점별) ───────────── */
+/* ───────────── 코스·기록 (코스는 전체 공통, 기록은 매장별) ───────────── */
 
 function courseOf_(r, i) {
   var holes = []; try { holes = JSON.parse(str_(r[4])); } catch (e) { holes = []; }
@@ -631,7 +649,7 @@ function putRecs_(cid, uid, br, recs) {
 }
 function visibleUids_(users) { var ok = {}; for (var i = 0; i < users.length; i++) if (users[i].active && canRead_(statusOf_(users[i]))) ok[users[i].uid] = true; return ok; }
 function privateMap_() { var m = {}, r = rows_('prefs'); for (var i = 0; i < r.length; i++) if (num_(r[i][2]) === 0) m[str_(r[i][0]) + '|' + String(r[i][1])] = true; return m; }
-/** 등록한 사람: 회원번호면 지금 닉네임, 예전 다른 지점에서 가져온 코스('이름@지점')는 그대로 표시 */
+/** 등록한 사람: 회원번호면 지금 닉네임, 예전 다른 매장에서 가져온 코스('이름@매장')는 그대로 표시 */
 function regOf_(c, map) {
   var s = String(c.reg || '');
   if (s.indexOf('@') >= 0) { var p = s.split('@'); return { nick: p[0], from: p[1] || '' }; }
@@ -657,7 +675,7 @@ function aCourse(q, ctx) {
   var c = findCourse_(q.id), u = ctx.u, br = ctx.br, map = nickMap_();
   if (!c || !canSeeCourse_(c, u)) throw E_('nocourse', '찾는 코스가 없어요. 지워졌을 수 있어요.');
   var out = { ok: true, br: br, store: branchName_(br), course: courseView_(c, u, ctx.st, map), mine: getRecs_(c.id, u.uid, br).recs, authors: [], pick: null, ref: null };
-  if (u.home && u.home !== br) {                                            // 다른 지점에서 볼 때: 기본 지점 내 기록을 참고로(흐리게)
+  if (u.home && u.home !== br) {                                            // 다른 매장에서 볼 때: 기본 매장 내 기록을 참고로(흐리게)
     var hr = getRecs_(c.id, u.uid, u.home).recs;
     if (filledOf_(hr)) out.ref = { br: u.home, store: branchName_(u.home), recs: hr };
   }
@@ -772,7 +790,7 @@ function aPub(q, ctx) {
 function aPrefs(q, ctx) { var r = rows_('prefs'), off = []; for (var i = 0; i < r.length; i++) if (str_(r[i][0]) === ctx.u.uid && num_(r[i][2]) === 0) off.push(String(r[i][1])); return { ok: true, off: off }; }
 
 /* ───────────── 신뢰도 ─────────────
- * 다른 회원이 내 기록을 가져다 쓰면 1점. 같은 사람·같은 지점·같은 코스는 몇 번이든 1점(날짜만 최근으로). 점수는 지점을 합쳐서 하나. */
+ * 다른 회원이 내 기록을 가져다 쓰면 1점. 같은 사람·같은 매장·같은 코스는 몇 번이든 1점(날짜만 최근으로). 점수는 매장을 합쳐서 하나. */
 
 function trustMap_() { var m = {}, r = rows_('uses'); for (var i = 0; i < r.length; i++) { var k = str_(r[i][0]); m[k] = (m[k] || 0) + 1; } return m; }
 function findUse_(owner, user, cid, br) {
@@ -786,7 +804,7 @@ function aUse(q, ctx) {
   var src = userByUid_(q.from) || findUser_(q.from);
   if (!src || src.uid === me.uid) throw E_('bad', '가져온 회원을 찾을 수 없어요.');
   var vis = visibleUids_(users_()), priv = privateMap_();
-  if (!vis[src.uid] || priv[src.uid + '|' + c.id] || !(getRecs_(c.id, src.uid, br).recs.some(function (r) { return r.r; }))) throw E_('bad', '이 지점·이 코스에 공개된 기록이 없는 회원이에요.');
+  if (!vis[src.uid] || priv[src.uid + '|' + c.id] || !(getRecs_(c.id, src.uid, br).recs.some(function (r) { return r.r; }))) throw E_('bad', '이 매장·이 코스에 공개된 기록이 없는 회원이에요.');
   var now = Date.now(), had = findUse_(src.uid, me.uid, c.id, br);
   if (had) sheet_('uses').getRange(had.row, 5).setValue(now);
   else append_('uses', [src.uid, me.uid, c.id, now, now, br]);
@@ -841,17 +859,17 @@ function plainOf_(h) { return String(h).replace(/<br>/g, '\n').replace(/<[^>]*>/
 function cleanTitle_(s, max) { return String(s || '').replace(/[<>]/g, '').replace(/^\s+|\s+$/g, '').slice(0, max); }
 
 /* ───────────── 문의하기: 자주 묻는 질문(FAQ) + 1:1 문의 ─────────────
- * 분류: pay(결제·이용권)·branch(지점 추가 요청)는 관리자만 답변. 그 밖은 그 지점 운영자도 답변. */
+ * 분류: pay(결제·이용권)·branch(매장 추가 요청)는 관리자만 답변. 그 밖은 그 매장 운영자도 답변. */
 
-var QNA_CAT = { pay: '결제·이용권', course: '코스 정보 수정 요청', app: '앱 사용·오류', acct: '계정·비밀번호', branch: '지점 추가 요청', nick: '닉네임 확인 요청', etc: '기타' };
+var QNA_CAT = { pay: '결제·이용권', course: '코스 정보 수정 요청', app: '앱 사용·오류', acct: '계정·비밀번호', branch: '매장 추가 요청', nick: '닉네임 확인 요청', etc: '기타' };
 var QNA_LIM = { perDay: 5, openMax: 3, userChars: 500, staffChars: 1000, faqChars: 2000, titleChars: 30, autoCloseDays: 7, keepDays: 365 };
 var FAQ_DEFAULTS = [
-  ['비밀번호를 잊었어요', '기본 지점 운영자에게 말씀해 주세요. 운영자가 <b>비밀번호 다시 만들기</b>를 하면 새 처음 비밀번호를 알려 드려요. 들어온 뒤 나만의 숫자 4자리로 바꾸면 돼요.'],
+  ['비밀번호를 잊었어요', '기본 매장 운영자에게 말씀해 주세요. 운영자가 <b>비밀번호 다시 만들기</b>를 하면 새 처음 비밀번호를 알려 드려요. 들어온 뒤 나만의 숫자 4자리로 바꾸면 돼요.'],
   ['송금했는데 아직 이용이 시작되지 않아요', '관리자가 카카오페이 내역이나 통장에서 <b>보낸 분 표시(닉네임)</b>와 금액을 확인한 뒤 승인하면 바로 시작돼요.<br>송금 메시지에 닉네임을 적지 않았다면 <span class="c-r">결제·이용권</span> 분류로 문의를 남겨 주세요.'],
-  ['다른 지점에서도 쓸 수 있나요?', '네. 이용권 하나로 <b>모든 지점</b>을 쓸 수 있어요. 위쪽 지점 이름을 누르면 지점을 바꿀 수 있어요.<br>지점마다 센서와 타격감이 달라서 <b>기록은 지점별로</b> 따로 저장돼요. 다른 지점에서는 기본 지점 내 기록이 흐리게 보여서 참고하거나 가져올 수 있어요.'],
-  ['우리 매장도 넣어 주세요', '문의하기에서 <b>지점 추가 요청</b> 분류로 매장 이름과 위치를 남겨 주세요. 관리자가 확인한 뒤 지점을 만들어 드려요.'],
+  ['다른 매장에서도 쓸 수 있나요?', '네. 이용권 하나로 <b>모든 매장</b>을 쓸 수 있어요. 위쪽 매장 이름을 누르면 매장을 바꿀 수 있어요.<br>매장마다 센서와 타격감이 달라서 <b>기록은 매장별로</b> 따로 저장돼요. 다른 매장에서는 기본 매장 내 기록이 흐리게 보여서 참고하거나 가져올 수 있어요.'],
+  ['우리 매장도 넣어 주세요', '문의하기에서 <b>매장 추가 요청</b> 분류로 매장 이름과 위치를 남겨 주세요. 관리자가 확인한 뒤 매장을 만들어 드려요.'],
   ['타격감 17은 무슨 뜻인가요?', '<b>17 = 50M</b>이고, 1마다 5M씩 달라져요. 예: 16 = 45M, 18 = 55M. 기록할 때 처음부터 17이 들어 있어요.'],
-  ['다른 회원 기록이 보이지 않아요', '그 지점·그 코스에 기록을 <b>공개</b>한 회원만 보여요. 이용 기간이 끝나면 내 기록만 볼 수 있어요. 이용권을 결제하면 다시 보여요.'],
+  ['다른 회원 기록이 보이지 않아요', '그 매장·그 코스에 기록을 <b>공개</b>한 회원만 보여요. 이용 기간이 끝나면 내 기록만 볼 수 있어요. 이용권을 결제하면 다시 보여요.'],
   ['홈 화면 아이콘이 예전 그림이에요', '아이폰은 홈 화면에 추가한 순간의 아이콘이 그대로 남아요. 아이콘을 지우고 Safari로 다시 열어 <b>홈 화면에 추가</b>를 하면 새 아이콘으로 바뀌어요.'],
   ['체험은 어떻게 시작하나요?', '로그인 화면의 <b>5일 무료 체험 시작하기</b>를 누르고, 스크린 파크골프에서 쓰는 닉네임·자주 가는 매장·비밀번호 4자리를 정하면 바로 시작돼요. 체험은 한 사람당 한 번이에요. 매장 운영자에게 만들어 달라고 해도 돼요.'],
   ['내 닉네임을 다른 분이 쓰고 있어요', '문의하기에서 <b>닉네임 확인 요청</b>을 남겨 주세요. 관리자가 확인한 뒤 닉네임을 정리해 드려요.'],
@@ -967,7 +985,7 @@ function aQnaReply(q, ctx) {
   var x = findQna_(q.id), u = ctx.u;
   if (!x || !canSeeQna_(u, x)) throw E_('noqna', '찾는 문의가 없어요.');
   var staffSide = x.uid !== u.uid;
-  if (staffSide && !canAnswer_(u, x)) throw E_('perm', adminCat_(x.cat) ? '결제·이용권, 지점 추가, 닉네임 확인 요청은 관리자만 답변할 수 있어요.' : '다른 지점 문의에는 답변할 수 없어요.');
+  if (staffSide && !canAnswer_(u, x)) throw E_('perm', adminCat_(x.cat) ? '결제·이용권, 매장 추가, 닉네임 확인 요청은 관리자만 답변할 수 있어요.' : '다른 매장 문의에는 답변할 수 없어요.');
   var body = cleanHtml_(q.html, staffSide ? QNA_LIM.staffChars : QNA_LIM.userChars), now = Date.now();
   if (x.msgs.length >= 60) throw E_('limit', '대화가 너무 길어요. 새 문의로 남겨 주세요.');
   x.msgs.push({ by: u.uid, role: staffSide ? 'staff' : 'user', at: now, html: body });
@@ -993,7 +1011,7 @@ function qnaMaintenance_() {
 }
 
 /* ───────────── 공지사항 ─────────────
- * br: '' = 모든 지점, 지점 코드 = 그 지점만. 관리자는 어디든, 운영자는 소속 지점만. 게시 기간·상단 고정·팝업(앱을 열 때 한 번). */
+ * br: '' = 모든 매장, 매장 코드 = 그 매장만. 관리자는 어디든, 운영자는 소속 매장만. 게시 기간·상단 고정·팝업(앱을 열 때 한 번). */
 
 function noticeOf_(r, i) {
   var b = []; try { b = JSON.parse(str_(r[12]) || '[]'); } catch (e) { b = []; }
@@ -1019,7 +1037,7 @@ function liveNotice_(n, br) { var t = today_(); return (!n.br || n.br === br) &&
 function sortNotices_(l) { l.sort(function (a, b) { return (b.pin - a.pin) || (b.upd - a.upd); }); return l; }
 /** 앱을 열 때 받는 짧은 목록(안 읽은 공지 숫자·팝업을 화면이 정함) */
 function noticeHeads_(br) { return sortNotices_(notices_().filter(function (n) { return liveNotice_(n, br); })).slice(0, 20).map(function (n) { return { id: n.id, upd: n.upd, popup: n.popup, title: n.title }; }); }
-function noticeView_(n, map) { return { id: n.id, br: n.br, store: n.br ? branchName_(n.br) : '모든 지점', title: n.title, html: n.html, pin: n.pin, start: n.start, end: n.end, popup: n.popup, by: nickOf_(n.by, map), created: n.created, upd: n.upd, img: n.img, btns: n.btns }; }
+function noticeView_(n, map) { return { id: n.id, br: n.br, store: n.br ? branchName_(n.br) : '모든 매장', title: n.title, html: n.html, pin: n.pin, start: n.start, end: n.end, popup: n.popup, by: nickOf_(n.by, map), created: n.created, upd: n.upd, img: n.img, btns: n.btns }; }
 function canEditNotice_(u, br) { return u.kind === 'admin' || (u.kind === 'op' && br === u.home); }
 function aNoticeList(q, ctx) {
   var u = ctx.u, map = nickMap_(), all = notices_(), manage = !!q.manage && isStaff_(u);
@@ -1028,8 +1046,8 @@ function aNoticeList(q, ctx) {
 }
 function aNoticeSave(q, ctx) {
   var u = ctx.u, br = String(q.br || ''), now = Date.now();
-  if (br && !findBranch_(br)) throw E_('branch', '없는 지점이에요.');
-  if (!canEditNotice_(u, br)) throw E_('perm', u.kind === 'op' ? '운영자는 소속 지점 공지만 쓸 수 있어요.' : '공지를 쓸 수 없어요.');
+  if (br && !findBranch_(br)) throw E_('branch', '없는 매장이에요.');
+  if (!canEditNotice_(u, br)) throw E_('perm', u.kind === 'op' ? '운영자는 소속 매장 공지만 쓸 수 있어요.' : '공지를 쓸 수 없어요.');
   var title = cleanTitle_(q.title, 40); if (!title) throw E_('bad', '제목을 적어 주세요.');
   var html = cleanHtml_(q.html, 2000);
   var d = function (s) { s = String(s || ''); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : ''; };
@@ -1042,7 +1060,7 @@ function aNoticeSave(q, ctx) {
     n.br = br; n.title = title; n.html = html; n.pin = q.pin ? 1 : 0; n.start = start; n.end = end; n.popup = q.popup ? 1 : 0; n.upd = now; n.img = cleanImg_(q.img); n.btns = cleanBtns_(q.btns);
     setRow_('notices', n.row, noticeRow_(n));
   } else append_('notices', noticeRow_({ id: 'n' + now.toString(36) + rand_(3), br: br, title: title, html: html, pin: q.pin ? 1 : 0, start: start, end: end, popup: q.popup ? 1 : 0, by: u.uid, created: now, upd: now, img: cleanImg_(q.img), btns: cleanBtns_(q.btns) }));
-  log_(u.nick, '공지', title + ' (' + (br ? branchName_(br) : '모든 지점') + ')');
+  log_(u.nick, '공지', title + ' (' + (br ? branchName_(br) : '모든 매장') + ')');
   return aNoticeList({ manage: 1 }, ctx);
 }
 function aNoticeDel(q, ctx) {
@@ -1094,7 +1112,7 @@ function seedPromo_() {
   return '친구 초대 홍보 공지를 올렸어요(맨 위 고정).\n';
 }
 
-/* ───────────── 결제 (닉네임 송금 + 관리자 승인, 이용권은 전 지점 공통) ───────────── */
+/* ───────────── 결제 (닉네임 송금 + 관리자 승인, 이용권은 전 매장 공통) ───────────── */
 
 function payOf_(r, i) {
   return { id: str_(r[0]), uid: str_(r[1]), plan: str_(r[2]), amount: num_(r[3]), method: str_(r[4]), depositor: str_(r[5]), status: str_(r[6]),
@@ -1117,6 +1135,7 @@ function aPayReq(q, ctx) {
   var u = ctx.u, plan = q.plan === 'year' ? 'year' : q.plan === 'month' ? 'month' : '';
   if (!plan) throw E_('bad', '이용권을 골라 주세요.');
   var can = canPay_(u); if (!can.ok) throw E_('nopay', can.why);
+  if (refunds_().some(function (x) { return x.uid === u.uid && x.status === 'req'; })) throw E_('nopay', '환불 신청 중에는 결제할 수 없어요. 환불 신청을 취소하거나 처리된 뒤에 결제해 주세요.');
   var method = q.method === 'bank' ? 'bank' : 'kakao';
   var dep = cleanTitle_(q.depositor || u.nick, 10) || u.nick;
   var old = myPending_(u.uid); if (old) { old.status = 'cancel'; setRow_('payments', old.row, payRow_(old)); }
@@ -1126,9 +1145,21 @@ function aPayReq(q, ctx) {
   return { ok: true, pending: payView_(p) };
 }
 function aPayCancel(q, ctx) { var p = myPending_(ctx.u.uid); if (!p) throw E_('nopay', '확인 기다리는 결제가 없어요.'); p.status = 'cancel'; setRow_('payments', p.row, payRow_(p)); return { ok: true }; }
+/** 결제 목록에 추천인: 아직 보상 전이면 "승인하면 ○○님에게 +N일" 안내용 */
+function payRef_(v, um, map, jc) {
+  var u = um[v.uid]; if (!u || !u.ref) return v;
+  var r = um[u.ref]; v.refNick = nickOf_(u.ref, map);
+  var done = u.refPay ? u.refPay.split('|') : null;
+  v.refDone = done ? 1 : 0;
+  v.refThis = done && done[0] === v.id ? num_(done[1]) : 0;                  // 이 결제로 받은 보상 일수
+  v.refWill = !done && jc.refOn && r && r.active && !isStaff_(r) ? jc.refDays : 0;
+  return v;
+}
 function aPayList() {
-  var all = pays_(), pend = [], done = [], map = nickMap_();
-  for (var i = all.length - 1; i >= 0; i--) { if (all[i].status === 'pending') pend.push(payView_(all[i], map)); else if (done.length < 40 && all[i].status !== 'cancel') done.push(payView_(all[i], map)); }
+  var all = pays_(), pend = [], done = [], map = nickMap_(), um = {}, jc = joinCfg_();
+  users_().forEach(function (u) { um[u.uid] = u; });
+  var view = function (p) { return payRef_(payView_(p, map), um, map, jc); };
+  for (var i = all.length - 1; i >= 0; i--) { if (all[i].status === 'pending') pend.push(view(all[i])); else if (done.length < 40 && all[i].status !== 'cancel') done.push(view(all[i])); }
   pend.reverse();
   return { ok: true, pending: pend, recent: done };
 }
@@ -1149,10 +1180,11 @@ function payDecide_(p, q, ctx) {
   var rw = reward_(u, p);
   return { ok: true, pay: payView_(p), member: memberView_(u), reward: rw };
 }
-function refundCalc_(p) {
-  var t = today_(), total = PLAN[p.plan].days, used = t < p.start ? 0 : Math.min(total, diffDays_(p.start, t)), remain = total - used;
-  var recUsed = rows_('records').some(function (r) { return str_(r[1]) === p.uid && num_(r[4]) >= p.decided; });
-  if (Date.now() - p.decided < LIM.refundFullDays * 86400000 && !recUsed) return { amount: p.amount, remain: remain, total: total, full: true, why: '결제 후 ' + LIM.refundFullDays + '일 이내이고 기록을 쓰지 않아 전액 환불해요.' };
+function refundCalc_(p, at) {                                              // at: 환불 신청한 때(없으면 지금) 기준으로 계산
+  at = at || Date.now();
+  var t = Utilities.formatDate(new Date(at), TZ, 'yyyy-MM-dd'), total = PLAN[p.plan].days, used = t < p.start ? 0 : Math.min(total, diffDays_(p.start, t)), remain = total - used;
+  var recUsed = rows_('records').some(function (r) { return str_(r[1]) === p.uid && num_(r[4]) >= p.decided && num_(r[4]) <= at; });
+  if (at - p.decided < LIM.refundFullDays * 86400000 && !recUsed) return { amount: p.amount, remain: remain, total: total, full: true, why: '결제 후 ' + LIM.refundFullDays + '일 이내이고 기록을 쓰지 않아 전액 환불해요.' };
   var amt = Math.floor(p.amount * remain / total / 100) * 100;
   return { amount: amt, remain: remain, total: total, full: false, why: p.amount.toLocaleString() + '원 × 남은 ' + remain + '일 ÷ ' + total + '일 (100원 미만 버림)' };
 }
@@ -1167,11 +1199,98 @@ function aPayRefund(q, ctx) {
   var u = userByUid_(p.uid), t = today_();
   if (u) { u.end = t < p.start ? addDays_(p.start, -1) : addDays_(t, -1); saveUser_(u); unreward_(u, p); }
   p.status = 'refunded'; p.refund = calc.amount; p.refundAt = Date.now(); setRow_('payments', p.row, payRow_(p));
+  refunds_().forEach(function (x) { if (x.pid === p.id && x.status === 'req') { x.status = 'done'; x.amount = calc.amount; x.decided = Date.now(); x.by = ctx.u.uid; wipeAcct_(x); setRow_('refunds', x.row, refundRow_(x)); } });
   log_(ctx.u.nick, '환불', (u ? u.nick : p.name) + ' ' + calc.amount + '원');
   return { ok: true, calc: calc, pay: payView_(p), member: u ? memberView_(u) : null };
 }
 
-/* ───────────── 회원 관리 (운영자는 소속 지점이 기본 지점인 회원만) ───────────── */
+/* ───────────── 환불 신청 (회원이 받을 계좌를 적고 → 관리자가 송금 후 완료) ─────────────
+ * 계좌번호·예금주는 회원 본인에게도 일부를 *로 가려서 보여요. 전체 번호는 처리 전 관리자 화면에만.
+ * 완료·반려·취소되면 시트에서도 전체 번호를 지우고 가린 번호만 남겨요. */
+function maskAcct_(a) {
+  a = String(a || ''); var digits = a.replace(/\D/g, '').length, k = 0;
+  return a.replace(/\d/g, function (d) { k++; return k <= 3 || k > digits - 3 ? d : '*'; });
+}
+function maskName_(n) { n = String(n || ''); return n.length <= 1 ? n : n.length === 2 ? n[0] + '*' : n[0] + new Array(n.length - 1).join('*') + n[n.length - 1]; }
+function refundOf_(r, i) { return { id: str_(r[0]), uid: str_(r[1]), pid: str_(r[2]), created: num_(r[3]), status: str_(r[4]), bank: str_(r[5]), acct: str_(r[6]), holder: str_(r[7]), reason: str_(r[8]), amount: num_(r[9]), remain: num_(r[10]), why: str_(r[11]), decided: num_(r[12]), by: str_(r[13]), note: str_(r[14]), name: str_(r[15]), row: i + 2 }; }
+function refundRow_(x) { return [x.id, x.uid, x.pid, x.created, x.status, x.bank, x.acct, x.holder, x.reason, x.amount, x.remain, x.why, x.decided, x.by, x.note, x.name]; }
+function refunds_() { return rows_('refunds').map(refundOf_); }
+function wipeAcct_(x) { if (x.acct.indexOf('*') < 0) x.acct = maskAcct_(x.acct); if (x.holder.indexOf('*') < 0) x.holder = maskName_(x.holder); }
+function refundView_(x, full, map) {
+  var p = findPay_(x.pid);
+  return { id: x.id, uid: x.uid, nick: nickOf_(x.uid, map), pid: x.pid, planName: p && PLAN[p.plan] ? PLAN[p.plan].name : '', paid: p ? p.amount : 0, period: p ? p.start + '~' + p.end : '',
+    created: x.created, status: x.status, bank: x.bank, acct: full && x.status === 'req' ? x.acct : maskAcct_(x.acct), holder: full && x.status === 'req' ? x.holder : maskName_(x.holder),
+    reason: x.reason, amount: x.amount, remain: x.remain, why: x.why, decided: x.decided, note: x.note };
+}
+/** 환불할 수 있는 결제: 가장 최근 승인 결제이고 아직 환불 전 */
+function refundable_(uid) {
+  var mine = pays_().filter(function (p) { return p.uid === uid && (p.status === 'ok' || p.status === 'refunded'); }).sort(function (a, b) { return b.decided - a.decided; });
+  return mine.length && mine[0].status === 'ok' ? mine[0] : null;
+}
+function refundState_(u) {
+  if (isStaff_(u)) return null;
+  var mine = refunds_().filter(function (x) { return x.uid === u.uid; }).sort(function (a, b) { return (b.created - a.created) || (b.row - a.row); }), last = mine[0];
+  var req = last && last.status === 'req' ? refundView_(last, false) : null;
+  var recent = last && last.status !== 'req' && last.status !== 'cancel' && Date.now() - last.decided < 14 * 86400000 ? refundView_(last, false) : null;
+  return { can: !req && !!refundable_(u.uid) ? 1 : 0, req: req, recent: recent };
+}
+function aRefundInfo(q, ctx) {
+  var u = ctx.u, p = refundable_(u.uid), st = refundState_(u) || {};
+  return { ok: true, state: st, pay: p ? payView_(p) : null, calc: p && !st.req ? refundCalc_(p) : null, fullDays: LIM.refundFullDays };
+}
+function aRefundReq(q, ctx) {
+  var u = ctx.u;
+  if (isStaff_(u)) throw E_('perm', '운영진은 환불 신청을 하지 않아요.');
+  if (refunds_().some(function (x) { return x.uid === u.uid && x.status === 'req'; })) throw E_('dup', '이미 환불 신청을 했어요. 관리자가 확인하고 있어요.');
+  var p = refundable_(u.uid); if (!p) throw E_('nopay', '환불할 수 있는 결제가 없어요.');
+  var bank = cleanTitle_(q.bank, 20), acct = String(q.acct || '').replace(/[^\d-]/g, '').replace(/^-+|-+$/g, ''), holder = cleanTitle_(q.holder, 20), reason = cleanTitle_(q.reason, 100);
+  var nd = acct.replace(/\D/g, '').length;
+  if (!bank) throw E_('bad', '은행을 골라 주세요.');
+  if (nd < 6 || nd > 20) throw E_('bad', '계좌번호를 숫자로 정확히 적어 주세요. (- 는 있어도 없어도 돼요)');
+  if (!holder) throw E_('bad', '예금주 이름을 적어 주세요.');
+  if (!q.agree) throw E_('bad', '안내를 확인하고 체크해 주세요.');
+  var now = Date.now(), calc = refundCalc_(p, now);
+  var x = { id: 'r' + now.toString(36) + rand_(3), uid: u.uid, pid: p.id, created: now, status: 'req', bank: bank, acct: acct, holder: holder, reason: reason, amount: calc.amount, remain: calc.remain, why: calc.why, decided: 0, by: '', note: '', name: u.nick };
+  append_('refunds', refundRow_(x));
+  log_(u.nick, '환불 신청', (PLAN[p.plan] ? PLAN[p.plan].name : p.plan) + ' 예상 ' + calc.amount + '원 · ' + bank + ' ' + maskAcct_(acct));
+  return { ok: true, state: refundState_(u) };
+}
+function aRefundCancel(q, ctx) {
+  var x = refunds_().filter(function (r) { return r.uid === ctx.u.uid && r.status === 'req'; })[0];
+  if (!x) throw E_('nopay', '취소할 환불 신청이 없어요.');
+  x.status = 'cancel'; x.decided = Date.now(); x.by = ctx.u.uid; wipeAcct_(x); setRow_('refunds', x.row, refundRow_(x));
+  log_(ctx.u.nick, '환불 신청 취소', '');
+  return { ok: true, state: refundState_(ctx.u) };
+}
+function aRefundList() {
+  var map = nickMap_(), all = refunds_().sort(function (a, b) { return (b.created - a.created) || (b.row - a.row); });
+  return { ok: true, pending: all.filter(function (x) { return x.status === 'req'; }).reverse().map(function (x) { return refundView_(x, true, map); }),
+    recent: all.filter(function (x) { return x.status === 'done' || x.status === 'rejected'; }).slice(0, 20).map(function (x) { return refundView_(x, false, map); }) };
+}
+function aRefundDecide(q, ctx) {
+  var x = refunds_().filter(function (r) { return r.id === String(q.id); })[0];
+  if (!x || x.status !== 'req' || cache_().get('rd:' + x.id)) throw E_('nopay', '이미 처리된 환불 신청이에요. 목록을 새로 불러올게요.');
+  cache_().put('rd:' + x.id, '1', 21600);
+  try {
+    var u = userByUid_(x.uid);
+    if (!q.ok) {
+      x.status = 'rejected'; x.note = cleanTitle_(q.note, 100) || '관리자 확인 결과 환불할 수 없어요.'; x.decided = Date.now(); x.by = ctx.u.uid; wipeAcct_(x); setRow_('refunds', x.row, refundRow_(x));
+      log_(ctx.u.nick, '환불 반려', (u ? u.nick : x.name) + ' · ' + x.note);
+      return { ok: true };
+    }
+    var p = findPay_(x.pid);
+    if (!p || p.status !== 'ok') throw E_('nopay', '이 결제는 이미 환불됐거나 찾을 수 없어요.');
+    var last = refundable_(x.uid); if (!last || last.id !== p.id) throw E_('nopay', '이 회원은 신청 뒤에 결제한 이용권이 있어요. 회원과 확인한 뒤 반려하고 다시 신청받아 주세요.');
+    var calc = { amount: x.amount, remain: x.remain, why: x.why }, t = Utilities.formatDate(new Date(x.created), TZ, 'yyyy-MM-dd');   // 금액은 신청할 때 정한 그대로
+    if (u) { u.end = t < p.start ? addDays_(p.start, -1) : addDays_(t, -1); saveUser_(u); unreward_(u, p); }      // 신청한 날부터 이용 끝
+    p.status = 'refunded'; p.refund = calc.amount; p.refundAt = Date.now(); setRow_('payments', p.row, payRow_(p));
+    x.status = 'done'; x.amount = calc.amount; x.decided = Date.now(); x.by = ctx.u.uid; wipeAcct_(x); setRow_('refunds', x.row, refundRow_(x));
+    log_(ctx.u.nick, '환불 완료', (u ? u.nick : x.name) + ' ' + calc.amount + '원 · ' + x.bank + ' ' + x.acct);
+    return { ok: true, amount: calc.amount };
+  } catch (e) { cache_().remove('rd:' + x.id); throw e; }
+}
+
+/* ───────────── 회원 관리 (운영자는 소속 매장이 기본 매장인 회원만) ───────────── */
 
 function memberView_(u, extra) {
   var i = userInfo_(u), o = { uid: u.uid, nick: u.nick, prev: i.prev, kind: u.kind, kindName: i.kindName, st: i.st, start: u.start, end: u.end, left: i.left, active: u.active ? 1 : 0, last: u.last, seen: u.seen, must: u.must ? 1 : 0, ext: u.ext || 0, home: u.home, homeName: branchName_(u.home), created: u.created,
@@ -1184,14 +1303,16 @@ function aMembers(q, ctx) {
   var me = ctx.u, now = Date.now(), users = users_().filter(function (u) { return inScope_(me, u) || u.uid === me.uid; });
   if (me.kind === 'admin' && q.br) users = users.filter(function (u) { return u.home === q.br || (q.br === '_staff' && isStaff_(u)); });
   var keys = users.map(function (u) { return 'seen:' + u.uid; }), seen = cache_().getAll ? cache_().getAll(keys) : {};
-  var seats = cget_('seats') || {}, cnt = {}, rr = rows_('records'), pend = {}, tm = trustMap_(), devN = {};
+  var seats = cget_('seats') || {}, cnt = {}, rr = rows_('records'), pend = {}, tm = trustMap_(), devN = {}, map = nickMap_(), paid = {};
+  pays_().forEach(function (p) { if (p.status === 'ok' || p.status === 'refunded') paid[p.uid] = 1; });
   users_().forEach(function (u) { if (u.dev) devN[u.dev] = (devN[u.dev] || 0) + 1; });
   for (var i = 0; i < rr.length; i++) if (num_(rr[i][2]) > 0) { var k = str_(rr[i][1]); cnt[k] = (cnt[k] || 0) + 1; }
   pays_().forEach(function (p) { if (p.status === 'pending') pend[p.uid] = 1; });
   var list = users.map(function (u) {
     var s = Math.max(num_(seen['seen:' + u.uid]), u.seen || 0, seats[u.uid] || 0);
     var stale = u.src === 'self' && u.kind === 'trial' && statusOf_(u) === 'expired' && u.end && diffDays_(u.end, today_()) > 30 && now - s > 30 * 86400000 ? 1 : 0;
-    return memberView_(u, { seenAt: s, online: now - s < LIM.idleMs ? 1 : 0, courses: cnt[u.uid] || 0, pendingPay: pend[u.uid] || 0, trust: tm[u.uid] || 0, sameDev: u.dev ? devN[u.dev] - 1 : 0, stale: stale });
+    return memberView_(u, { seenAt: s, online: now - s < LIM.idleMs ? 1 : 0, courses: cnt[u.uid] || 0, pendingPay: pend[u.uid] || 0, trust: tm[u.uid] || 0, sameDev: u.dev ? devN[u.dev] - 1 : 0, stale: stale,
+      refNick: u.ref ? nickOf_(u.ref, map) : '', refPaid: u.refPay ? 1 : 0, canRef: !isStaff_(u) && !paid[u.uid] ? 1 : 0 });
   });
   var order = { admin: 0, op: 1, year: 2, month: 3, trial: 4 };
   list.sort(function (a, b) { return (b.online - a.online) || ((order[a.kind] || 9) - (order[b.kind] || 9)) || (a.nick < b.nick ? -1 : 1); });
@@ -1220,7 +1341,7 @@ function aMUpdate(q, ctx) {
   if (u.uid === me.uid) throw E_('self', '내 계정은 여기서 바꿀 수 없어요.');
   var op = q.op, out = { ok: true }, t = today_();
   if (!isAdmin && !(op === 'trialExt' || op === 'pin' || (op === 'active' && u.kind === 'trial'))) throw E_('perm', '이 기능은 관리자만 할 수 있어요.');
-  if (!inScope_(me, u)) throw E_('perm', isStaff_(u) ? '운영자 계정은 관리자만 관리할 수 있어요.' : '다른 지점 회원은 그 지점 운영자가 관리해요.');
+  if (!inScope_(me, u)) throw E_('perm', isStaff_(u) ? '운영자 계정은 관리자만 관리할 수 있어요.' : '다른 매장 회원은 그 매장 운영자가 관리해요.');
   if (op === 'trialExt') {
     if (u.kind !== 'trial') throw E_('bad', '체험회원만 연장할 수 있어요.');
     if ((u.ext || 0) >= LIM.trialExtMax) throw E_('bad', '체험 연장은 ' + LIM.trialExtMax + '번까지만 할 수 있어요.');
@@ -1235,7 +1356,7 @@ function aMUpdate(q, ctx) {
     var b2 = u.end && u.end >= t ? u.end : addDays_(t, -1);
     u.end = addDays_(b2, Math.max(1, Math.min(730, Math.round(Number(q.days) || 30))));
   } else if (op === 'home') {
-    var nb = findBranch_(q.br); if (!nb) throw E_('branch', '없는 지점이에요.');
+    var nb = findBranch_(q.br); if (!nb) throw E_('branch', '없는 매장이에요.');
     u.home = nb.code; u.homeAt = Date.now();
   } else if (op === 'rename') {                                         // 관리자: 닉네임 확인 요청 처리(선점한 닉네임 정리). 예전 이름은 보호하지 않고 바로 풀어 줌
     var to = normNick_(q.to);
@@ -1243,6 +1364,21 @@ function aMUpdate(q, ctx) {
     var w2 = nickTaken_(to, u.uid); if (w2) throw E_('dupnick', w2);
     var was = u.nick; u.nick = to; u.prev = ''; u.prevUntil = 0;
     log_(me.nick, '닉네임 정리', was + ' → ' + to);
+  } else if (op === 'ref') {                                            // 관리자: 추천인 정하기(링크 없이 가입한 분). 첫 결제 전까지만
+    if (isStaff_(u)) throw E_('bad', '운영진에게는 추천인을 정하지 않아요.');
+    if (pays_().some(function (p) { return p.uid === u.uid && (p.status === 'ok' || p.status === 'refunded'); })) throw E_('bad', '첫 결제를 한 뒤에는 추천인을 바꿀 수 없어요.');
+    var to = normNick_(q.to);
+    if (!to) { log_(me.nick, '추천인 지움', u.nick + (u.ref ? ' (' + nickOf_(u.ref, nickMap_()) + ')' : '')); u.ref = ''; }
+    else {
+      var r = findUser_(to);
+      if (!r) throw E_('nouser', '"' + to + '" 닉네임의 회원이 없어요.');
+      if (r.uid === u.uid) throw E_('bad', '자기 자신을 추천인으로 정할 수 없어요.');
+      if (!r.active) throw E_('bad', '이용이 중지된 회원은 추천인이 될 수 없어요.');
+      if (r.ref === u.uid) throw E_('bad', '서로 추천인이 될 수는 없어요. (' + r.nick + '님은 이 회원의 초대로 가입했어요)');
+      if (u.dev && r.dev && u.dev === r.dev) throw E_('bad', '같은 휴대폰으로 가입한 계정끼리는 추천인이 될 수 없어요.');
+      u.ref = r.uid; u.refPay = '';
+      log_(me.nick, '추천인 정함', u.nick + ' ← ' + r.nick + (isStaff_(r) ? ' (운영진이라 보상 없음)' : ''));
+    }
   } else if (op === 'pin') {
     var len = pinLen_(u), pin = genPin_(len);
     u.salt = rand_(16); u.hash = hashPin_(pin, u.salt); u.must = 1; u.fail = 0; u.lock = 0; u.lockN = 0; u.plen = len;
@@ -1256,6 +1392,7 @@ function aMUpdate(q, ctx) {
     rewrite_('prefs', function (r) { return str_(r[0]) !== k; });
     rewrite_('uses', function (r) { return str_(r[0]) !== k && str_(r[1]) !== k; });
     rewrite_('qna', function (r) { return str_(r[1]) !== k; });
+    rewrite_('refunds', function (r) { return str_(r[1]) !== k; });
     rewrite_('users', function (r) { return str_(r[14]) !== k; });
     log_(me.nick, '계정 삭제', u.nick);
     return out;
@@ -1266,7 +1403,7 @@ function aMUpdate(q, ctx) {
   return out;
 }
 
-/* ───────────── 현황판 (관리자: 전체·지점별 / 운영자: 소속 지점, 결제 금액 제외) ───────────── */
+/* ───────────── 현황판 (관리자: 전체·매장별 / 운영자: 소속 매장, 결제 금액 제외) ───────────── */
 
 function aDash(q, ctx) {
   var me = ctx.u, isAdmin = me.kind === 'admin', br = isAdmin ? String(q.br || '') : me.home, now = Date.now(), t = today_(), t0 = dayStart_(t), month = t.slice(0, 7);
@@ -1285,7 +1422,7 @@ function aDash(q, ctx) {
     if (now - u.created < 7 * 86400000) recent.push({ uid: u.uid, nick: u.nick, kindName: KIND_NAME[u.kind], created: u.created, homeName: branchName_(u.home) });
   });
   soon.sort(function (a, b) { return a.left - b.left; }); recent.sort(function (a, b) { return b.created - a.created; });
-  var out = { ok: true, br: br, store: br ? branchName_(br) : '모든 지점', total: total, today: today, branches: Object.keys(per).map(function (k) { return per[k]; }).filter(function (r) { return !br || r.code === br; }),
+  var out = { ok: true, br: br, store: br ? branchName_(br) : '모든 매장', total: total, today: today, branches: Object.keys(per).map(function (k) { return per[k]; }).filter(function (r) { return !br || r.code === br; }),
     soon: soon.slice(0, 20), recent: recent.slice(0, 20), seats: seatStat_(), isAdmin: isAdmin };
   var okPay = {}; pays_().forEach(function (p) { if (p.status === 'ok' || p.status === 'refunded') okPay[p.uid] = 1; });
   out.joinsToday = users.filter(function (u) { return u.src === 'self' && u.created >= t0; }).length;
@@ -1300,11 +1437,12 @@ function aDash(q, ctx) {
     out.month = { label: month, count: ok.length, amount: ok.reduce(function (s, p) { return s + p.amount; }, 0), refund: refunds.reduce(function (s, p) { return s + p.refund; }, 0) };
     out.month.net = out.month.amount - out.month.refund;
     out.pending = pays.filter(function (p) { return p.status === 'pending' && mine(p); }).length;
+    out.refundReq = refunds_().filter(function (x) { return x.status === 'req' && mine({ uid: x.uid }); }).length;
   }
   return out;
 }
 
-/* ───────────── 지점 관리 (관리자) ───────────── */
+/* ───────────── 매장 관리 (관리자) ───────────── */
 
 function aBranchList(q, ctx) {
   var cnt = {}; users_().forEach(function (u) { if (!isStaff_(u)) cnt[u.home] = (cnt[u.home] || 0) + 1; });
@@ -1312,20 +1450,20 @@ function aBranchList(q, ctx) {
 }
 function aBranchSave(q, ctx) {
   var code = String(q.code || '').toLowerCase(), name = cleanTitle_(q.name, 20);
-  if (!/^[a-z][a-z0-9]{1,15}$/.test(code)) throw E_('bad', '지점 코드는 영문 소문자로 시작하는 2~16자(영문 소문자·숫자)로 적어 주세요. 예: suyu');
-  if (!name) throw E_('bad', '지점 이름을 적어 주세요.');
+  if (!/^[a-z][a-z0-9]{1,15}$/.test(code)) throw E_('bad', '매장 코드는 영문 소문자로 시작하는 2~16자(영문 소문자·숫자)로 적어 주세요. 예: suyu');
+  if (!name) throw E_('bad', '매장 이름을 적어 주세요.');
   var all = rows_('branches'), at = -1;
   for (var i = 0; i < all.length; i++) if (str_(all[i][0]) === code) at = i;
   if (at >= 0) {
     var r = all[at], active = q.active === undefined ? num_(r[2]) : (q.active ? 1 : 0);
-    if (!active && code === firstBranch_() && branches_().filter(function (b) { return b.active; }).length === 1) throw E_('bad', '열려 있는 지점이 하나뿐이라 닫을 수 없어요.');
+    if (!active && code === firstBranch_() && branches_().filter(function (b) { return b.active; }).length === 1) throw E_('bad', '열려 있는 매장이 하나뿐이라 닫을 수 없어요.');
     setRow_('branches', at + 2, [code, name, active, q.order !== undefined ? num_(q.order) : num_(r[3]), num_(r[4])]);
-    log_(ctx.u.nick, '지점 수정', code + ' ' + name + (active ? '' : ' (닫음)'));
+    log_(ctx.u.nick, '매장 수정', code + ' ' + name + (active ? '' : ' (닫음)'));
   } else {
-    if (q.create !== 1 && q.create !== true) throw E_('bad', '없는 지점이에요.');
+    if (q.create !== 1 && q.create !== true) throw E_('bad', '없는 매장이에요.');
     var mx = 0; all.forEach(function (r2) { mx = Math.max(mx, num_(r2[3])); });
     append_('branches', [code, name, 1, mx + 1, Date.now()]);
-    log_(ctx.u.nick, '지점 추가', code + ' ' + name);
+    log_(ctx.u.nick, '매장 추가', code + ' ' + name);
   }
   cache_().remove('branches');
   return aBranchList(q, ctx);
@@ -1363,7 +1501,7 @@ function aSetCfg(q, ctx) {
   if (q.join_per_day !== undefined) { var jd = Math.round(Number(q.join_per_day)); if (!(jd >= 1 && jd <= 1000)) throw E_('bad', '하루 가입 한도는 1~1000 사이로 넣어 주세요.'); setSetting_('join_per_day', jd); ch.push('가입한도'); }
   if (q.ref_on !== undefined) { setSetting_('ref_on', q.ref_on ? 1 : 0); ch.push('추천보상'); }
   if (q.ref_days !== undefined) { var rd = Math.round(Number(q.ref_days)); if (!(rd >= 1 && rd <= 60)) throw E_('bad', '추천 보상은 1~60일 사이로 넣어 주세요.'); setSetting_('ref_days', rd); ch.push('보상일수'); }
-  if (q.seats !== undefined) { var n = Math.round(Number(q.seats)); if (!(n >= 0 && n <= 1000)) throw E_('bad', '좌석 수는 0~1000 사이로 넣어 주세요. (0 = 제한 없음)'); setSetting_('seats', n); ch.push('좌석'); }
+  if (q.seats !== undefined) { var n = Math.round(Number(q.seats)); if (!(n >= 0 && n <= 1000)) throw E_('bad', '한 번에 쓸 수 있는 인원은 0~1000 사이로 넣어 주세요. (0 = 제한 없음)'); setSetting_('seats', n); ch.push('좌석'); }
   log_(ctx.u.nick, '설정 변경', ch.join(','));
   return aAdminCfg();
 }
@@ -1444,8 +1582,14 @@ var H = {
   logoReset:  { w: 1, admin: 1, fn: aLogoReset },
   log:        { admin: 1, fn: aLog },
   imgPut:     { w: 1, staff: 1, fn: aImgPut },
+  refundInfo: { fn: aRefundInfo },
+  refundReq:  { w: 1, fn: aRefundReq },
+  refundCancel: { w: 1, fn: aRefundCancel },
+  refundList: { admin: 1, fn: aRefundList },
+  refundDecide: { w: 1, admin: 1, fn: aRefundDecide },
   imgGet:     { noSeat: 1, fn: aImgGet },
   joinCheck:  { pub: 1, fn: aJoinCheck },
+  refName:    { pub: 1, fn: aRefName },
   join:       { pub: 1, w: 1, fn: aJoin },
   refInfo:    { fn: aRefInfo }
 };
@@ -1454,9 +1598,10 @@ var H = {
 
 /**
  * 처음 한 번, 그리고 새 버전 Code.gs 를 붙여 넣은 뒤 한 번 실행하세요(여러 번 실행해도 안전).
- * 시트 만들기, 비밀 열쇠, 지점, 관리자 계정, 예전(v1·v2) 자료 옮기기, 매일·매주 정리 예약.
+ * 시트 만들기, 비밀 열쇠, 매장, 관리자 계정, 예전(v1·v2) 자료 옮기기, 매일·매주 정리 예약.
  */
 function setup() {
+  resetMemo_();
   var ss = ss_();
   for (var name in SH) {
     var s = ss.getSheetByName(TITLE[name]);
@@ -1475,7 +1620,7 @@ function setup() {
     var st = settings_().store;
     SEED_BRANCHES.forEach(function (b, i) { append_('branches', [b[0], i === 0 && st ? st : b[1], 1, i + 1, Date.now()]); });
     cache_().remove('branches');
-    msg += '지점 ' + SEED_BRANCHES.length + '곳을 만들었어요: ' + branches_().map(function (b) { return b.name; }).join(', ') + '\n';
+    msg += '매장 ' + SEED_BRANCHES.length + '곳을 만들었어요: ' + branches_().map(function (b) { return b.name; }).join(', ') + '\n';
   }
   msg += migrate_();
   seedFaq_();
@@ -1501,7 +1646,7 @@ function setup() {
 /**
  * 예전 자료 옮기기(한 번만, 설정의 schema 로 표시)
  *  - v1: 고정회원 → 가입일부터 365일 연간, 기간회원 → 월간
- *  - v2 → v3: 회원번호(uid) 만들기, 모든 시트의 닉네임을 회원번호로, 기존 기록·신뢰도·문의는 첫 지점(양주점)으로, 운영진은 6자리 비밀번호로 바꾸게
+ *  - v2 → v3: 회원번호(uid) 만들기, 모든 시트의 닉네임을 회원번호로, 기존 기록·신뢰도·문의는 첫 매장(양주점)으로, 운영진은 6자리 비밀번호로 바꾸게
  */
 function migrate_() {
   var m = '', all = users_(), moved = [], ended = [];
@@ -1568,6 +1713,7 @@ function installTriggers_() {
 
 /** 개발자용: 관리자 비밀번호를 잊었을 때 새로 만듭니다(6자리). */
 function devResetAdminPin() {
+  resetMemo_();
   var u = findUser_(ADMIN_NICK) || users_().filter(function (x) { return x.kind === 'admin'; })[0];
   if (!u) { tryUi_('안내', '관리자 계정이 없어요. setup 을 실행해 주세요.'); return; }
   var pin = genPin_(6);
@@ -1580,6 +1726,7 @@ function devResetAdminPin() {
 
 /** 매일 새벽: 만료된 로그인 정리, 문의 정리, 이력 정리, 백업 시트(최근 7일), 1년 지난 입금자 이름 가리기 */
 function dailyMaintenance() {
+  resetMemo_();
   var lock = LockService.getScriptLock(); if (!lock.tryLock(60000)) return;   // 회원 요청과 겹치지 않게
   try { dailyMaintenance_(); } finally { try { SpreadsheetApp.flush(); } catch (e) { /* 무시 */ } lock.releaseLock(); }
 }
@@ -1607,6 +1754,7 @@ function maskOldDepositors_() {
 }
 /** 매주(일요일 새벽): 구글 드라이브 "공략노트 백업" 폴더에 시트 전체 사본, 최근 8주 보관 */
 function weeklyBackup() {
+  resetMemo_();
   var name = '공략노트 백업', it = DriveApp.getFoldersByName(name), folder = it.hasNext() ? it.next() : DriveApp.createFolder(name);
   var stamp = Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd');
   DriveApp.getFileById(ss_().getId()).makeCopy('공략노트 백업 ' + stamp, folder);

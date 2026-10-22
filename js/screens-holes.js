@@ -6,12 +6,13 @@
   function load(id, who) {
     return LZ.api('course', { id: id, who: who || u.store.get('lz.who.' + id) || '' }).then(function (d) {
       var cur = { course: d.course, mine: d.mine, authors: d.authors, pick: d.pick, ref: d.ref, br: d.br || LZ.branch, fetched: Date.now(), stale: false };
-      LZ.cache.course = cur; return cur;
+      LZ.cache.course = cur; (LZ.cache.courseMap = LZ.cache.courseMap || {})[id] = cur; return cur;
     });
   }
   async function getCur(id, root, alive, title) {
-    var cur = LZ.cache.course && LZ.cache.course.course.id === id && !LZ.cache.course.stale && LZ.cache.course.br === LZ.branch ? LZ.cache.course : null;
-    if (cur) return cur;
+    var ok = function (c) { return c && c.course.id === id && !c.stale && c.br === LZ.branch && Date.now() - c.fetched < 180000; };   // 3분 안에 연 코스는 바로
+    var cur = ok(LZ.cache.course) ? LZ.cache.course : ok((LZ.cache.courseMap || {})[id]) ? LZ.cache.courseMap[id] : null;
+    if (cur) { LZ.cache.course = cur; return cur; }
     root.innerHTML = '<div class="scr">' + ui.hdr2(title || '코스 불러오는 중') + '<div class="bd nt">' + ui.skeleton(5) + '</div></div>';
     cur = await load(id); if (!alive()) return null;
     return cur;
@@ -26,7 +27,7 @@
   function sameRec(a, b) { return a.r === b.r && (a.r !== 'u' || u.key(a.t) === u.key(b.t)) && a.d === b.d && (a.n | 0) === (b.n | 0) && (a.p | 0) === (b.p | 0) && (a.o || '') === (b.o || ''); }
   function maxHole(c) { return c.stage === 'done' ? 18 : 9; }
 
-  /* 기록 가져오기 (mode: 'empty' 빈 홀만, 'all' 모두 덮어쓰기, 숫자: 그 홀만). src: 다른 회원(cur.pick) 또는 기본 지점 내 기록(refSrc). 되돌리기 함수를 돌려줌 */
+  /* 기록 가져오기 (mode: 'empty' 빈 홀만, 'all' 모두 덮어쓰기, 숫자: 그 홀만). src: 다른 회원(cur.pick) 또는 기본 매장 내 기록(refSrc). 되돌리기 함수를 돌려줌 */
   function refSrc(cur) { return cur.ref ? { recs: cur.ref.recs, nick: cur.ref.store + ' 내 기록', mine: true } : null; }
   function srcName(src) { return src.mine ? src.nick : src.nick + '님 기록'; }
   function importRecs(cur, mode, src) {
@@ -39,7 +40,7 @@
       if (sameRec(cur.mine[i], o[i])) continue;
       before[i] = u.cloneRec(cur.mine[i]); cur.mine[i] = u.cloneRec(o[i]); LZ.rec.queue(c.id, i, cur.mine[i]); changed.push(i);
     }
-    /* 신뢰도: 다른 회원 기록을 가져다 쓴 것을 서버에 알림(같은 코스는 몇 번이든 1점). 내 기록(기본 지점)은 점수 없음. 되돌리면 방금 생긴 1점은 뺌 */
+    /* 신뢰도: 다른 회원 기록을 가져다 쓴 것을 서버에 알림(같은 코스는 몇 번이든 1점). 내 기록(기본 매장)은 점수 없음. 되돌리면 방금 생긴 1점은 뺌 */
     var from = src.uid, used = changed.length && !src.mine ? LZ.api('use', { cid: c.id, from: from }, { retry: 1 }).then(function (r) { setTrust(cur, from, r.trust); return r; }, function () { return null; }) : null;
     return { n: changed.length, done: used, undo: function () {
       changed.forEach(function (i) { cur.mine[i] = before[i]; LZ.rec.queue(c.id, i, cur.mine[i]); });
@@ -61,7 +62,7 @@
     src = src || cur.pick;
     var nk = srcName(src), n = countFor(cur, src);
     if (!n.all) { ui.toast(nk + ' 중에 가져올 것이 없어요. (이미 같거나 기록이 없어요)', 4000); return null; }
-    var v = await ui.dialog({ title: nk + ' 가져오기', body: '어떻게 가져올까요?\n· 빈 홀만 채우기: 내가 아직 기록하지 않은 홀만 채워요.\n· 모두 덮어쓰기: ' + nk + '이 있는 홀은 모두 그 기록으로 바꿔요.\n' + (src.mine ? '지점마다 센서·파워가 달라서 가져온 뒤 이 지점에 맞게 고쳐 주세요.\n' : '') + '가져온 뒤에도 "되돌리기"로 돌아갈 수 있어요.', cancel: null,
+    var v = await ui.dialog({ title: nk + ' 가져오기', body: '어떻게 가져올까요?\n· 빈 홀만 채우기: 내가 아직 기록하지 않은 홀만 채워요.\n· 모두 덮어쓰기: ' + nk + '이 있는 홀은 모두 그 기록으로 바꿔요.\n' + (src.mine ? '매장마다 센서·파워가 달라서 가져온 뒤 이 매장에 맞게 고쳐 주세요.\n' : '') + '가져온 뒤에도 "되돌리기"로 돌아갈 수 있어요.', cancel: null,
       buttons: [{ label: '빈 홀만 채우기 (' + n.empty + '홀)', kind: 'y', value: 'empty' }, { label: '모두 덮어쓰기 (' + n.all + '홀 바뀜)', kind: 'r', value: 'all' }, { label: '취소', kind: 'g', value: null }] });
     if (!v) return null;
     if (v === 'empty' && !n.empty) { ui.toast('빈 홀 중에 ' + nk + '이 있는 홀이 없어요.', 4000); return null; }
@@ -83,19 +84,19 @@
         root.innerHTML = '<div class="scr">' + ui.hdr2(c.name) + '<div class="bd nt" style="padding:10px 8px calc(24px + var(--sab))">' +
           '<div class="ban g" id="wk" style="display:none;margin:0 4px 8px"></div>' +
           '<div class="hint" style="margin:0 6px 8px">18홀 · 파 ' + par() + ' · 총 ' + u.fmt(total()) + 'm · 처음 등록한 분: ' + esc(c.reg) + '님' + (c.regFrom ? ' (' + esc(c.regFrom) + ')' : '') + '</div>' +
-          (c.canEdit ? '' : '<div class="ban" style="margin:0 4px 8px">' + (c.regFrom ? '이 코스는 다른 지점(' + esc(c.regFrom) + ')에서 등록한 코스예요. ' : '') + '코스 정보(파·거리·이름)를 고쳐야 하면 <b>운영자에게 수정을 요청</b>해 주세요.' + (S.me && S.me.qnaOn ? ' <button class="sm" id="req" type="button" style="margin-top:6px">수정 요청하기</button>' : '') + '</div>') +
+          (c.canEdit ? '' : '<div class="ban" style="margin:0 4px 8px">' + (c.regFrom ? '이 코스는 다른 매장(' + esc(c.regFrom) + ')에서 등록한 코스예요. ' : '') + '코스 정보(파·거리·이름)를 고쳐야 하면 <b>운영자에게 수정을 요청</b>해 주세요.' + (S.me && S.me.qnaOn ? ' <button class="sm" id="req" type="button" style="margin-top:6px">수정 요청하기</button>' : '') + '</div>') +
           (c.canEdit ? '<div style="margin:0 4px 8px"><button class="sm" id="info" type="button">파·거리 고치기</button></div>' : '') +
           (ex ? '<div class="ban r" style="margin:8px 4px">이용 기간이 끝나서 다른 회원 기록은 볼 수 없고, 내 기록도 읽기만 돼요. <button class="sm" id="payb" type="button" style="margin-top:6px">이용권 결제하기</button></div>'
-            : pk ? '<div class="blk" style="margin:0 4px 8px"><div class="row2" style="margin:0 0 8px"><span style="font-size:14px;color:var(--mut)">참고할 회원 (이 지점)</span><button class="sm" id="who" type="button"><b>' + esc(pk.nick) + '님</b>&nbsp;· 신뢰도 ' + (pk.trust || 0) + '점 ▾</button></div><div id="wl" style="display:none;margin:0 0 8px"></div>' +
+            : pk ? '<div class="blk" style="margin:0 4px 8px"><div class="row2" style="margin:0 0 8px"><span style="font-size:14px;color:var(--mut)">참고할 회원 (이 매장)</span><button class="sm" id="who" type="button"><b>' + esc(pk.nick) + '님</b>&nbsp;· 신뢰도 ' + (pk.trust || 0) + '점 ▾</button></div><div id="wl" style="display:none;margin:0 0 8px"></div>' +
               '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><button class="sm" id="imp" type="button" style="justify-content:center">' + esc(pk.nick) + '님 기록 가져오기</button><button class="sm" id="cmp" type="button" style="justify-content:center">비교 분석</button></div>' +
               '<div id="undo"></div></div>'
-              : '<div class="ban" style="margin:8px 4px">이 지점에는 이 코스에 공개된 다른 회원 기록이 아직 없어요.</div>') +
-          (cur.ref ? '<div class="blk ref" style="margin:0 4px 8px"><div style="font-size:14px;color:var(--mut);margin-bottom:6px">📍 기본 지점 <b>' + esc(cur.ref.store) + '</b>의 내 기록이 있어요. 지점마다 센서가 달라서 흐리게 참고로 보여 드려요.</div>' +
+              : '<div class="ban" style="margin:8px 4px">이 매장에는 이 코스에 공개된 다른 회원 기록이 아직 없어요.</div>') +
+          (cur.ref ? '<div class="blk ref" style="margin:0 4px 8px"><div style="font-size:14px;color:var(--mut);margin-bottom:6px">📍 기본 매장 <b>' + esc(cur.ref.store) + '</b>의 내 기록이 있어요. 매장마다 센서가 달라서 흐리게 참고로 보여 드려요.</div>' +
             (ex ? '' : '<button class="sm" id="impref" type="button">' + esc(cur.ref.store) + ' 내 기록 가져오기</button>') + '</div>' : '') +
           '<div class="seg" id="half" style="margin:0 4px"><button type="button" data-h="0" class="' + (half ? '' : 'on') + '">전반 9홀</button><button type="button" data-h="1" class="' + (half ? 'on' : '') + '">후반 9홀</button></div>' +
           '<div class="row2" style="margin:6px 4px"><label class="chk"><input type="checkbox" id="om" ' + (onlyMine ? 'checked' : '') + '>내 기록만 보기</label><span style="display:flex;gap:6px"><button class="sm" id="zm" type="button" aria-label="표 작게">작게</button><button class="sm" id="zp" type="button" aria-label="표 크게">크게</button></span></div>' +
           '<div class="hint" style="margin:0 6px 6px"><span id="zl"></span> · ' + (half ? '1홀(10홀) ~ 9홀(18홀)' : '1홀 ~ 9홀') + ' · 옆으로 밀면 전반↔후반</div>' +
-          '<div class="zoomwrap" id="zw"><div id="ht"></div></div><p class="hint" style="margin:6px 6px 2px">노란 줄이 내 기록이에요. ' + (ex ? '' : '누르면 크게 고칠 수 있어요. ') + '두 손가락으로 벌려서 키울 수도 있어요.</p></div></div>';
+          '<div class="zoomwrap" id="zw"><div id="ht"></div></div><p class="hint" style="margin:6px 6px 2px">' + (ex ? '' : '"내 기록" 줄을 누르면 크게 보고 고칠 수 있어요. ') + '두 손가락으로 벌려서 키울 수도 있어요.</p></div></div>';
         ui.wakeBan($('#wk'));
         $('#info') && ($('#info').onclick = function () { LZ.go('courseEdit', { id: c.id }); });
         $('#req') && ($('#req').onclick = function () { LZ.go('qnaNew', { cat: 'course', cid: c.id, cname: c.name, title: (c.name + ' 수정 요청').slice(0, 30) }); });
@@ -201,7 +202,7 @@
           if (rec.r && !sameRec(rec, rr) && !(await ui.confirm('내 기록을 바꿀까요?', '이 홀의 내 기록이 ' + cur.ref.store + ' 내 기록으로 바뀌어요.', '바꾸기'))) return;
           var r = importRecs(cur, i, refSrc(cur));
           await LZ.go('edit', { id: c.id, i: i }, { replace: true, skipGuard: true });
-          if (r.n) ui.toastUndo(cur.ref.store + ' 내 기록을 가져왔어요. 이 지점에 맞게 고쳐 주세요.', '되돌리기', function () { r.undo(); LZ.go('edit', { id: c.id, i: i }, { replace: true, skipGuard: true }); });
+          if (r.n) ui.toastUndo(cur.ref.store + ' 내 기록을 가져왔어요. 이 매장에 맞게 고쳐 주세요.', '되돌리기', function () { r.undo(); LZ.go('edit', { id: c.id, i: i }, { replace: true, skipGuard: true }); });
         };
       }
       if (!ex && cur.pick) {

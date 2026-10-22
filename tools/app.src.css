@@ -170,3 +170,12 @@ html[data-theme="dark"] .stepper.dir output.L b,html[data-theme="dark"] .stepper
 .quick{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;margin:2px 0 8px}.quick button{min-height:44px;border-radius:10px;border:1.5px solid var(--bd2);background:var(--sf);font-size:16px;font-weight:500;color:var(--ink);padding:0}
 .quick button.L{color:#1D4ED8}.quick button.R{color:var(--rt)}.quick button.on.L{background:#1D4ED8;border-color:#1D4ED8;color:#fff}.quick button.on.R{background:var(--red);border-color:var(--red);color:#fff}.quick button.on.Z{background:var(--ink);border-color:var(--ink);color:var(--sf)}
 html[data-theme="dark"] .quick button.L{color:#93C5FD}html[data-theme="dark"] .quick button.on.L{background:#2563EB;color:#fff}
+.refl{margin-top:6px;font-size:14px;color:var(--bandt);background:var(--band);border-radius:8px;padding:5px 9px}
+.rfbox{border-color:var(--rt)}.acctbox{margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--sf2);font-size:15.5px;display:grid;gap:4px}.acctbox .sm{min-height:32px;margin-left:4px}
+.outb{flex-direction:column;gap:0;width:46px;min-width:46px;height:42px}.outb svg{width:19px;height:19px}.outb i{font-style:normal;font-size:9.5px;line-height:1;margin-top:2px;color:var(--mut);letter-spacing:-.3px}
+.hd .rt{flex-wrap:nowrap}
+button,a,[role=button],input,select,label{touch-action:manipulation}
+/* 안쪽 화면 머리글: 로그아웃 단추가 들어가도 제목이 덜 잘리게 */
+.hd2 .thm{width:36px;min-width:36px;height:36px;margin-left:4px;border-radius:10px}.hd2 .thm svg{width:20px;height:20px}.hd2 .outb i{display:none}
+/* 회원 관리 필터: 칸이 많으면 줄바꿈 */
+.seg.flt{flex-wrap:wrap}.seg.flt button{flex:1 0 30%;min-height:40px}

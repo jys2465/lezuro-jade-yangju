@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var LZ = window.LZ, u = LZ.u, ui = LZ.ui, $ = u.$, $$ = u.$$, esc = u.esc, S = LZ.S;
-  var CAT = { pay: '결제·이용권', course: '코스 정보 수정 요청', app: '앱 사용·오류', acct: '계정·비밀번호', branch: '지점 추가 요청', nick: '닉네임 확인 요청', etc: '기타' };
+  var CAT = { pay: '결제·이용권', course: '코스 정보 수정 요청', app: '앱 사용·오류', acct: '계정·비밀번호', branch: '매장 추가 요청', nick: '닉네임 확인 요청', etc: '기타' };
   var CAT_HINT = { pay: '관리자가 답변해요', course: '코스 이름·파·거리가 틀렸을 때', app: '화면이 이상하거나 잘 안 될 때', acct: '닉네임·비밀번호', branch: '다니는 매장이 목록에 없을 때 (관리자가 답변해요)', nick: '내 닉네임을 다른 분이 쓰고 있을 때 (관리자가 답변해요)', etc: '그 밖의 모든 것' };
   var ST = { open: ['답변 기다리는 중', 'y'], answered: ['답변 완료', 'gr'], closed: ['종료', ''] };
   var ST_STAFF = { open: ['답변 필요', 'r'], answered: ['답변 완료', 'gr'], closed: ['종료', ''] };
@@ -117,8 +117,9 @@
       root.innerHTML = frame(ui.skeleton(3));
       var faq = null, list = null;
       async function loadTab() {
-        if (tab === 'faq' && !faq) faq = await LZ.api('faqList', {});
-        if (tab === 'list' && !list) { var r = await LZ.api('qnaList', {}); list = r.list; setBadge(r.badge); }
+        var later = function (t, f) { LZ.whenQuiet(function () { if (alive() && tab === t) { f(); draw(); } }, 'qna'); };   // 새 내용이 오면 이 화면 안에서만 다시 그림
+        if (tab === 'faq' && !faq) faq = await LZ.capi('faqList', {}, { onFresh: function (d) { later('faq', function () { faq = d; }); } });
+        if (tab === 'list' && !list) { var r = await LZ.capi('qnaList', {}, { onFresh: function (d) { later('list', function () { list = d.list; setBadge(d.badge); }); } }); list = r.list; setBadge(r.badge); }
       }
       function faqHtml() {
         return (faq.canEdit ? '<button class="btn g sm2" id="fadd" type="button" style="margin-bottom:10px">질문 추가 (관리자)</button>' : '') +
@@ -164,7 +165,7 @@
         '<label class="lbl" style="margin-top:0">분류를 골라 주세요</label><div class="qcat" id="qc">' + Object.keys(CAT).filter(function (k) { return !(staff() && (k === 'pay' || k === 'branch' || k === 'nick')); }).map(function (k) {
           return '<button type="button" data-c="' + k + '" class="' + (cat === k ? 'on' : '') + '"><b>' + CAT[k] + '</b><small>' + CAT_HINT[k] + '</small></button>';
         }).join('') + '</div>' +
-        '<label class="lbl" for="qtl">제목 (30자까지)</label><input class="inp" id="qtl" maxlength="30" value="' + esc(p.title || (p.cat === 'branch' ? '지점 추가 요청' : '')) + '" placeholder="예: 송금했는데 시작이 안 돼요">' +
+        '<label class="lbl" for="qtl">제목 (30자까지)</label><input class="inp" id="qtl" maxlength="30" value="' + esc(p.title || (p.cat === 'branch' ? '매장 추가 요청' : '')) + '" placeholder="예: 송금했는데 시작이 안 돼요">' +
         '<label class="lbl">내용 (500자까지) <span style="font-size:12px">— 글자를 고른 뒤 굵게·크게·색을 누르면 꾸밀 수 있어요</span></label><div id="ed"></div>' +
         (p.cid ? '<div class="hint">코스: <b>' + esc(p.cname || '') + '</b> (자동으로 함께 보내요)</div>' : '') +
         '<div class="msg" id="err" role="alert"></div><button class="btn" id="send" type="button" style="margin-top:12px">문의 남기기</button>' +
@@ -207,7 +208,7 @@
             return '<div class="msgb ' + (m.role === 'staff' ? 'st' : 'us') + (me ? ' me' : '') + '"><div class="who">' + who + ' · ' + when(m.at) + '</div><div class="rich">' + LZ.safeHtml(m.html) + '</div></div>';
           }).join('') + '</div>' +
           (q.status === 'closed' ? '<div class="ann">종료된 문의예요. 더 궁금한 점은 새 문의로 남겨 주세요.</div>'
-            : staff() && !mine && !q.canAnswer ? '<div class="ban r">' + (q.cat === 'pay' || q.cat === 'branch' || q.cat === 'nick' ? '결제·이용권, 지점 추가, 닉네임 확인 요청은 관리자만 답변할 수 있어요.' : '다른 지점 문의라서 그 지점 운영자가 답변해요.') + '</div>'
+            : staff() && !mine && !q.canAnswer ? '<div class="ban r">' + (q.cat === 'pay' || q.cat === 'branch' || q.cat === 'nick' ? '결제·이용권, 매장 추가, 닉네임 확인 요청은 관리자만 답변할 수 있어요.' : '다른 매장 문의라서 그 매장 운영자가 답변해요.') + '</div>'
             : '<label class="lbl">' + (mine ? '이어서 묻기' : '답변 쓰기') + '</label><div id="ed"></div><div class="msg" id="err" role="alert"></div>' +
               '<button class="btn" id="send" type="button" style="margin-top:10px">' + (mine ? '보내기' : '답변 보내기') + '</button>') +
           (canWrite ? '<button class="btn g" id="close" type="button" style="margin-top:8px">' + (mine ? '해결됐어요 (문의 종료)' : '문의 종료') + '</button>' : '') + '</div></div>';

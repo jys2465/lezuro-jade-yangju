@@ -17,11 +17,11 @@
   u.key = function (s) { return u.stripSpaces(s).toLowerCase(); };
   u.debounce = function (fn, ms) { var t; var f = function () { var a = arguments, c = this; clearTimeout(t); t = setTimeout(function () { fn.apply(c, a); }, ms); }; f.cancel = function () { clearTimeout(t); }; return f; };
 
-  /* ───── 통합 서버 하나 + 지점(서버 안의 칸) ─────
-   * 서버 주소는 하나(config.js 의 API). 지점은 서버가 알려 주고, 주소 끝의 ?s=지점코드 로 열거나 앱 위쪽 지점 이름을 눌러 바꿉니다. */
+  /* ───── 통합 서버 하나 + 매장(서버 안의 칸) ─────
+   * 서버 주소는 하나(config.js 의 API). 매장은 서버가 알려 주고, 주소 끝의 ?s=매장코드 로 열거나 앱 위쪽 매장 이름을 눌러 바꿉니다. */
   LZ.configBroken = !window.LZ_CONFIG;                                           // config.js 에 쉼표·따옴표 실수가 있으면 파일 전체를 못 읽음
   var C = window.LZ_CONFIG || {}, clean = function (x) { return String(x || '').toLowerCase().replace(/[^a-z0-9]/g, ''); };
-  LZ.API = C.API || (function () {                                               // 예전 설정 모양(지점마다 주소)이면 기본 지점 주소를 씀
+  LZ.API = C.API || (function () {                                               // 예전 설정 모양(매장마다 주소)이면 기본 매장 주소를 씀
     if (!C.BRANCHES) return '';
     var d = C.BRANCHES[C.DEFAULT] || C.BRANCHES[Object.keys(C.BRANCHES)[0]] || {};
     return d.API || '';
@@ -31,17 +31,17 @@
   (function () {
     var q = clean(new URLSearchParams(location.search).get('s')), saved = null;
     try { saved = clean(localStorage.getItem('lz.br')) || clean(localStorage.getItem('lz.branch')); } catch (e) { /* 무시 */ }
-    LZ.branch = q || saved || '';                                                // 비어 있으면 서버가 마지막 지점·기본 지점으로 정해 줌
+    LZ.branch = q || saved || '';                                                // 비어 있으면 서버가 마지막 매장·기본 매장으로 정해 줌
     LZ.branchFromUrl = !!q;
   })();
   LZ.setBranch = function (code, name) {
     LZ.branch = code || ''; if (name && LZ.S) LZ.S.store = name;
     try { localStorage.setItem('lz.br', LZ.branch); } catch (e) { /* 무시 */ }
   };
-  /* 기기 저장소(실패해도 앱이 멈추지 않게). 앱 것은 "lz@app." 아래에 모아 두고, 화면 모드·글씨 크기·지점은 폰 전체 설정 */
+  /* 기기 저장소(실패해도 앱이 멈추지 않게). 앱 것은 "lz@app." 아래에 모아 두고, 화면 모드·글씨 크기·매장은 폰 전체 설정 */
   var SHARED = /^lz\.(theme|fs|hintOff|hintAt|installed|inappOk|branch|br|dev|ref|buzz)$/, NS = 'lz@app.';
   function nk(k) { return /^lz\./.test(k) && !SHARED.test(k) ? NS + k.slice(3) : k; }
-  try {                                                                          // 예전 버전 값(lz.○○, 지점별 lz@yangju.○○)을 옮겨 와서 로그인 유지
+  try {                                                                          // 예전 버전 값(lz.○○, 매장별 lz@yangju.○○)을 옮겨 와서 로그인 유지
     if (!localStorage.getItem(NS + 'moved')) {
       var olds = [];
       for (var i = localStorage.length - 1; i >= 0; i--) { var k0 = localStorage.key(i); if (k0) olds.push(k0); }

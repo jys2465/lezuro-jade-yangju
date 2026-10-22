@@ -106,7 +106,7 @@ function createEnv(opts) {
   };
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'apps-script', 'Code.gs'), 'utf8'), ctx, { filename: 'Code.gs' });
-  if (opts && opts.vars) vm.runInContext(Object.keys(opts.vars).map(k => k + ' = ' + JSON.stringify(opts.vars[k]) + ';').join(''), ctx);   // 지점 코드 등 바꿔 시험
+  if (opts && opts.vars) vm.runInContext(Object.keys(opts.vars).map(k => k + ' = ' + JSON.stringify(opts.vars[k]) + ';').join(''), ctx);   // 매장 코드 등 바꿔 시험
   const call = (payload, t) => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(t === undefined ? payload : Object.assign({ t }, payload)) } }).getContent());
   return { ss, props, ctx, state, call, logs, triggers, cache, doGet: () => JSON.parse(ctx.doGet().getContent()) };
 }

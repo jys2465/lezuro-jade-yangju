@@ -37,7 +37,7 @@
     var cur = LZ.stack[LZ.stack.length - 1], s = LZ.screens[cur.name], root = $('#app'), my = ++tokenSeq;
     var alive = function () { return my === tokenSeq; };                 // 더 새 화면이 열렸으면 false
     var boot = $('#boot'); if (boot && boot.parentNode) boot.parentNode.removeChild(boot);
-    root.hidden = false; window.scrollTo(0, 0);
+    root.hidden = false; if (!render.keepScroll) window.scrollTo(0, 0);
     if (s.wake) LZ.wake.on(); else LZ.wake.off();                        // 코스 화면(표·홀 편집·비교)에서는 화면이 꺼지지 않게
     try { await s.show(cur.p || {}, root, alive); }
     catch (e) {
@@ -48,8 +48,31 @@
     }
     LZ.booted = true;
   }
+  /* 뒤에서 새 내용을 받았을 때 지금 화면을 조용히 다시 그림(입력 중이거나 고치는 중이면 다음에) */
+  LZ.busyUI = function () {                                                // 입력 중·창이 떠 있음·저장 안 한 내용 → 화면을 바꾸지 않음
+    var ae = document.activeElement;
+    return navBusy || (LZ.guard && LZ.guard.dirty()) || (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) || (ae && ae.isContentEditable) || !!document.querySelector('#layer .dlg') || !!document.querySelector('.qwait');
+  };
+  /* 지금 바꿀 수 없으면 조용해질 때까지 1초마다 기다렸다가(최대 30초, 같은 화면일 때만) 실행 */
+  LZ.whenQuiet = function (fn, name) {
+    var tries = 0, at = LZ.stack.length && LZ.stack[LZ.stack.length - 1];
+    (function go() {
+      var cur = LZ.stack[LZ.stack.length - 1];
+      if (!cur || cur !== at || (name && cur.name !== name)) return;
+      if (!LZ.busyUI()) { fn(); return; }
+      if (++tries < 30) setTimeout(go, 1000);
+    })();
+  };
+  LZ.softRefresh = function (name) { LZ.whenQuiet(redraw, name); };
+  function redraw() {
+    var y = window.scrollY; render.keepScroll = true;
+    render().then(function () { render.keepScroll = false; window.scrollTo(0, y); }, function () { render.keepScroll = false; });
+  }
+  LZ.fresh = function (name) { return function () { LZ.softRefresh(name); }; };
   /* 공통 단추: 뒤로(←), 아래 메뉴 */
   document.addEventListener('click', function (e) {
+    var lo = e.target.closest('[data-logout]');
+    if (lo) { e.preventDefault(); if (S.user) LZ.logout(); return; }
     var th = e.target.closest('[data-thm]');
     if (th) { e.preventDefault(); LZ.theme.toggle(); return; }
     var b = e.target.closest('[data-back]');
@@ -78,62 +101,62 @@
     LZ.stack.pop(); await render();
   });
 
-  /* 개인 링크 뒤에 붙는 부분: ?s=지점&u=닉네임 */
+  /* 개인 링크 뒤에 붙는 부분: ?s=매장&u=닉네임 */
   LZ.linkQuery = function (nick, br) { br = br || LZ.branch; return '?' + (br ? 's=' + encodeURIComponent(br) + '&' : '') + 'u=' + encodeURIComponent(nick); };
-  /* 지점 띠(📍 지점 ▾)를 누르면 지점 고르기 */
+  /* 매장 띠(📍 매장 ▾)를 누르면 매장 고르기 */
   document.addEventListener('click', function (e) {
     var b = e.target.closest('[data-branch]'); if (!b || !S.user) return;
     e.preventDefault(); if (LZ.stack[LZ.stack.length - 1].name !== 'branch') LZ.go('branch', {});
   });
   LZ.brName = function (code) { var l = S.branches || []; for (var i = 0; i < l.length; i++) if (l[i].code === code) return l[i].name; return code || ''; };
 
-  /* ───── 지점 바꾸기 ─────
-   * 지점마다 센서·파워가 달라서 기록은 지점마다 따로예요. 이용권·닉네임·신뢰도는 모든 지점 공통. */
+  /* ───── 매장 바꾸기 ─────
+   * 매장마다 센서·파워가 달라서 기록은 매장마다 따로예요. 이용권·닉네임·신뢰도는 모든 매장 공통. */
   LZ.switchBranch = async function (code, o) {
     o = o || {};
     if (LZ.rec.dirty()) { ui.busy(true, '저장하고 있어요…'); var ok = await LZ.rec.flush(); ui.busy(false); if (!ok) { ui.toast('저장하지 못한 기록이 있어요. 인터넷을 확인하고 다시 해 주세요.', 4500); return false; } }
     var before = LZ.branch;
-    ui.busy(true, '지점을 바꾸고 있어요…');
+    ui.busy(true, '매장을 바꾸고 있어요…');
     try {
       LZ.setBranch(code, LZ.brName(code));
       var r = await LZ.api('useBranch', { br: code }, { retry: 1 });
       LZ.setBranch(r.br, r.store);
     } catch (e) { ui.busy(false); LZ.setBranch(before, LZ.brName(before)); ui.toast(ui.errText(e), 4500); return false; }
     ui.busy(false);
-    LZ.cache = {}; LZ.guard = null;
+    LZ.cache = {}; LZ.guard = null; LZ.capiClear();
     try { history.replaceState(history.state, '', location.pathname + LZ.linkQuery(S.user.nick)); } catch (e) { /* 무시 */ }
-    LZ.refreshMe().then(function () { LZ.noticePopup(); });
-    if (!o.quiet) ui.toast('📍 ' + S.store + '(으)로 바꿨어요. 기록은 지점마다 따로예요.', 3500);
+    LZ.refreshMe(true).then(function () { LZ.noticePopup(); });
+    if (!o.quiet) ui.toast('📍 ' + S.store + '(으)로 바꿨어요. 기록은 매장마다 따로예요.', 3500);
     await LZ.go('courses', {}, { reset: true, skipGuard: true });
     return true;
   };
   LZ.screens.branch = {
     show: function (p, root) {
       var me = S.user || {}, list = S.branches || [], admin = ui.isAdmin(), op = me.kind === 'op';
-      var homeLine = op ? '운영자의 소속 지점은 관리자가 바꿔요.' : me.homeNext ? '기본 지점은 ' + u.fmtDate(me.homeNext) + '부터 다시 바꿀 수 있어요.' : '기본 지점은 30일에 한 번 바꿀 수 있어요.';
-      root.innerHTML = '<div class="scr">' + ui.hdr2('지점 고르기') + '<div class="bd nt">' +
-        '<div class="ban b" style="margin-top:0">지점마다 센서와 파워가 달라서 <b>기록은 지점마다 따로</b> 저장돼요. 이용권·닉네임·신뢰도는 모든 지점에서 같아요.</div>' +
+      var homeLine = op ? '운영자의 소속 매장은 관리자가 바꿔요.' : me.homeNext ? '기본 매장은 ' + u.fmtDate(me.homeNext) + '부터 다시 바꿀 수 있어요.' : '기본 매장은 30일에 한 번 바꿀 수 있어요.';
+      root.innerHTML = '<div class="scr">' + ui.hdr2('매장 고르기') + '<div class="bd nt">' +
+        '<div class="ban b" style="margin-top:0">매장마다 센서와 파워가 달라서 <b>기록은 매장마다 따로</b> 저장돼요. 이용권·닉네임·신뢰도는 모든 매장에서 같아요.</div>' +
         list.map(function (b) {
           var on = b.code === LZ.branch, home = b.code === me.home, closed = !b.active;
           return '<div class="card" style="' + (on ? 'border-color:var(--pri);' : '') + (closed ? 'opacity:.6;' : '') + 'display:block">' +
             '<button type="button" data-b="' + u.esc(b.code) + '" style="all:unset;display:flex;align-items:center;width:100%;cursor:pointer;min-height:48px">' +
-            '<div style="flex:1"><div class="t">' + u.esc(b.name) + (home ? ' <span class="chip g">기본 지점</span>' : '') + (closed ? ' <span class="chip">닫힘</span>' : '') + '</div>' +
-            '<div class="s">' + (on ? '지금 쓰는 지점' : '이 지점으로 바꾸기') + '</div></div>' + (on ? '<span class="chip r">지금</span>' : '<span style="font-size:24px;color:var(--mut2)">›</span>') + '</button>' +
-            (!home && !op && !closed ? '<button type="button" class="sm" data-home="' + u.esc(b.code) + '" style="margin-top:6px"' + (me.homeNext && !admin ? ' disabled' : '') + '>기본 지점으로 정하기</button>' : '') + '</div>';
+            '<div style="flex:1"><div class="t">' + u.esc(b.name) + (home ? ' <span class="chip g">기본 매장</span>' : '') + (closed ? ' <span class="chip">닫힘</span>' : '') + '</div>' +
+            '<div class="s">' + (on ? '지금 쓰는 매장' : '이 매장으로 바꾸기') + '</div></div>' + (on ? '<span class="chip r">지금</span>' : '<span style="font-size:24px;color:var(--mut2)">›</span>') + '</button>' +
+            (!home && !op && !closed ? '<button type="button" class="sm" data-home="' + u.esc(b.code) + '" style="margin-top:6px"' + (me.homeNext && !admin ? ' disabled' : '') + '>기본 매장으로 정하기</button>' : '') + '</div>';
         }).join('') +
-        '<p class="hint">기본 지점: <b>' + u.esc(me.homeName || LZ.brName(me.home)) + '</b> · ' + homeLine + '<br>다른 지점에서는 기본 지점의 내 기록을 흐리게 보여 드리고, 가져올 수 있어요.</p>' +
-        '<p class="hint">찾는 지점이 없나요? ' + (S.me && S.me.qnaOn ? '<a href="#" id="ask" style="color:var(--rt)">지점 추가 요청</a>을 남겨 주세요.' : '운영자에게 말씀해 주세요.') + '</p></div></div>';
+        '<p class="hint">기본 매장: <b>' + u.esc(me.homeName || LZ.brName(me.home)) + '</b> · ' + homeLine + '<br>다른 매장에서는 기본 매장의 내 기록을 흐리게 보여 드리고, 가져올 수 있어요.</p>' +
+        '<p class="hint">찾는 매장이 없나요? ' + (S.me && S.me.qnaOn ? '<a href="#" id="ask" style="color:var(--rt)">매장 추가 요청</a>을 남겨 주세요.' : '운영자에게 말씀해 주세요.') + '</p></div></div>';
       u.$$('[data-b]', root).forEach(function (b) {
         b.onclick = function () { var c = b.dataset.b; if (c === LZ.branch) { history.back(); return; } LZ.switchBranch(c); };
       });
       u.$$('[data-home]', root).forEach(function (b) {
         b.onclick = async function () {
           var c = b.dataset.home, nm = LZ.brName(c);
-          var ok = await ui.dialog({ title: nm + '을(를) 기본 지점으로 할까요?', body: '로그인하면 기본 지점으로 열려요. 다른 지점에서는 기본 지점의 내 기록을 참고로 볼 수 있어요.' + (admin ? '' : '\n바꾸면 30일 동안 다시 바꿀 수 없어요.'), cancel: false,
-            buttons: [{ label: '기본 지점으로 정하기', kind: 'y', value: true }, { label: '취소', kind: 'g', value: false }] });
+          var ok = await ui.dialog({ title: nm + '을(를) 기본 매장으로 할까요?', body: '로그인하면 기본 매장으로 열려요. 다른 매장에서는 기본 매장의 내 기록을 참고로 볼 수 있어요.' + (admin ? '' : '\n바꾸면 30일 동안 다시 바꿀 수 없어요.'), cancel: false,
+            buttons: [{ label: '기본 매장으로 정하기', kind: 'y', value: true }, { label: '취소', kind: 'g', value: false }] });
           if (!ok) return;
           ui.busy(true, '저장하고 있어요…');
-          try { var r = await LZ.api('setHome', { br: c }, { retry: 0 }); ui.busy(false); S.user = Object.assign({}, S.user, r.user); LZ.cache = {}; ui.toast(nm + '을(를) 기본 지점으로 정했어요.'); LZ.go('branch', {}, { replace: true, skipGuard: true }); }
+          try { var r = await LZ.api('setHome', { br: c }, { retry: 0 }); ui.busy(false); S.user = Object.assign({}, S.user, r.user); LZ.cache = {}; ui.toast(nm + '을(를) 기본 매장으로 정했어요.'); LZ.go('branch', {}, { replace: true, skipGuard: true }); }
           catch (e) { ui.busy(false); ui.toast(ui.errText(e), 5000); }
         };
       });
@@ -184,13 +207,13 @@
   LZ.setMe = function (me) {
     if (me.user) S.user = Object.assign({}, S.user, me.user);
     if (me.branches) S.branches = me.branches;
-    S.me = { pay: me.pay, pending: me.pending, trust: me.trust, qnaOn: me.qnaOn, qna: me.qna, notices: me.notices || [] };
+    S.me = { pay: me.pay, pending: me.pending, trust: me.trust, qnaOn: me.qnaOn, qna: me.qna, notices: me.notices || [], refund: me.refund || null };
     if (me.br) LZ.setBranch(me.br, me.store);
   };
   LZ.afterLogin = async function (user, me) {
     S.user = user; u.store.set('lz.nick', user.nick); LZ.cache = {};
     if (!user.must) u.store.set('lz.plen', String(user.pinLen || 4));
-    /* 지점: 링크의 ?s= → 마지막에 쓴 지점 → 기본 지점 */
+    /* 매장: 링크의 ?s= → 마지막에 쓴 매장 → 기본 매장 */
     var want = (LZ.branchFromUrl && LZ.branch) || user.lastBr || user.home || LZ.branch;
     if (!me || me.br !== want) {
       try { if (want) LZ.setBranch(want, LZ.brName(want)); LZ.setMe(await LZ.api('me', {}, { retry: 1 })); }
@@ -202,20 +225,36 @@
     LZ.rec.restore(); LZ.applyFontSize();
     if (user.must) return LZ.go('pin', { first: true }, { reset: true });
     await LZ.go(ui.isAdmin() ? 'dash' : 'courses', {}, { reset: true });
+    setTimeout(LZ.prefetch, 1500);
     await LZ.noticePopup();
     if (!ui.isStaff() && !LZ.joining) LZ.installHint();                   // 방금 가입한 분은 사용 방법을 다 본 뒤에
   };
   /* 내 등급·기간·결제 상태를 서버에서 다시 받음(결제 승인 뒤 바로 반영되도록) */
-  LZ.refreshMe = async function () {
+  var meAt = 0, meLater = null;
+  LZ.refreshMe = async function (force) {
+    var wait = 8000 - (Date.now() - meAt);
+    if (!force && wait > 0) {                                                // 8초 안에 또 부르면 한 번으로 모아서 8초가 지나면 받음
+      if (!meLater) meLater = u.sleep(wait).then(function () { meLater = null; return LZ.refreshMe(); });
+      return meLater;
+    }
+    meAt = Date.now();
     try {
       var me = await LZ.api('me', {}, { retry: 0 });
-      var was = S.user ? S.user.kind + S.user.st + S.user.end : '';
+      var sig = function () { var m = S.me || {}; return [S.user && S.user.kind, S.user && S.user.st, S.user && S.user.end, m.qna, m.pending && m.pending.id, JSON.stringify(m.refund || null), (m.notices || []).map(function (n) { return n.id + n.upd; }).join()].join('|'); };
+      var was = sig();
       LZ.setMe(me);
-      return was !== S.user.kind + S.user.st + S.user.end;
+      return was !== sig();                                                   // 등급·기간·답변·결제·환불·공지가 바뀌었는지
     } catch (e) { return false; }
   };
+  /* 자주 여는 탭을 미리 받아 둠(처음 누를 때도 바로 보이게) */
+  LZ.prefetch = function () {
+    if (!S.user || S.user.must) return;
+    var q = [['courses', {}], ['prefs', {}]];
+    if (ui.isStaff()) q.push(['dash', { br: ui.isAdmin() ? (u.store.get('lz.dashBr') || '') : '' }], ['members', { br: '' }]);
+    q.forEach(function (x, i) { setTimeout(function () { if (S.user) LZ.capi(x[0], x[1]).catch(function () {}); }, i * 400); });
+  };
   LZ.onAuthLost = function (msg) {
-    S.token = null; S.user = null; u.store.del('lz.t'); LZ.cache = {};
+    S.token = null; S.user = null; u.store.del('lz.t'); LZ.cache = {}; LZ.capiClear();
     LZ.guard = null; S.me = null;
     LZ.go('login', { msg: msg }, { reset: true });
   };
@@ -223,6 +262,7 @@
     var c = await ui.dialog({ title: '로그아웃 할까요?', body: '로그아웃하면 다음에 들어올 때 비밀번호를 다시 눌러야 해요.', cancel: false,
       buttons: [{ label: '로그아웃', kind: 'y', value: true }, { label: '취소', kind: 'g', value: false }] });
     if (!c) return;
+    var g = LZ.guard; if (g && g.kind === 'form' && g.dirty() && !(await LZ.leave())) return;   // 쓰던 글(문의·공지·코스 등록)이 있으면 먼저 물어봄
     if (LZ.rec.dirty()) {
       ui.busy(true, '저장하고 있어요…'); var ok = await LZ.rec.flush(); ui.busy(false);
       if (!ok) {
@@ -236,7 +276,7 @@
     ui.busy(true, '로그아웃 중이에요…');
     try { await LZ.api('logout', {}, { retry: 0, timeout: 8000 }); } catch (e) { /* 서버에 못 알려도 이 폰에서는 로그아웃 */ }
     ui.busy(false);
-    S.token = null; S.user = null; S.me = null; u.store.del('lz.t'); LZ.cache = {}; LZ.rec.reset();
+    S.token = null; S.user = null; S.me = null; u.store.del('lz.t'); LZ.cache = {}; LZ.capiClear(); LZ.rec.reset();
     await LZ.go('login', { msg: '로그아웃했어요.' }, { reset: true });
   };
   /* 홈 화면에 추가 안내(처음 한 번, 이후 일주일에 한 번까지) */
@@ -274,7 +314,7 @@
       var keep = { store: cfg.store, logoVer: cfg.logoVer, logos: cfg.logos || cached.logos };
       if (cfg.branches) S.branches = cfg.branches;
       if (cfg.join) S.join = cfg.join;
-      if (LZ.branch && cfg.branch !== LZ.branch) { LZ.setBranch(''); LZ.branchFromUrl = false; }   // 없어진 지점 코드(예전 링크)면 서버가 정하게
+      if (LZ.branch && cfg.branch !== LZ.branch) { LZ.setBranch(''); LZ.branchFromUrl = false; }   // 없어진 매장 코드(예전 링크)면 서버가 정하게
       S.store = cfg.store || S.store;
       applyCfg(keep); u.store.setJSON('lz.cfg', keep);
       if (cfg.logos) { S.logos.dark = cfg.logos.dark || 'assets/logo-dark.png'; S.logos.light = cfg.logos.light || 'assets/logo-light.png'; }

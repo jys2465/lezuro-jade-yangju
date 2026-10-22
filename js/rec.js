@@ -92,7 +92,7 @@
     function next(k) {
       if (k >= cids.length) return Promise.resolve(true);
       var cid = cids[k], items = Object.keys(snap[cid]).map(function (i) { return { i: +i, rec: snap[cid][i].rec }; });
-      var at = cid.indexOf('|'), br = at >= 0 ? cid.slice(0, at) : '', body = { cid: at >= 0 ? cid.slice(at + 1) : cid, items: items };   // 고친 그 지점에 저장
+      var at = cid.indexOf('|'), br = at >= 0 ? cid.slice(0, at) : '', body = { cid: at >= 0 ? cid.slice(at + 1) : cid, items: items };   // 고친 그 매장에 저장
       if (br) body.br = br;
       return LZ.api('save', body, { retry: 1 }).then(function () {
         for (var i in snap[cid]) if (pend[cid] && pend[cid][i] && pend[cid][i].v === snap[cid][i].v) delete pend[cid][i];   // 저장 중에 또 고친 것은 남겨 둠
@@ -120,7 +120,7 @@
     error: function () { return lastErr; },
     dirty: function () { return count() > 0; },
     queue: function (cid0, i, rec) {
-      var cid = (LZ.branch || '') + '|' + cid0;                                   // 지점마다 기록이 따로라서 지점도 함께 기억
+      var cid = (LZ.branch || '') + '|' + cid0;                                   // 매장마다 기록이 따로라서 매장도 함께 기억
       pend[cid] = pend[cid] || {}; pend[cid][i] = { rec: u.cloneRec(rec), v: ++ver };
       persist(); setStatus('wait'); clearTimeout(timer); clearTimeout(retryT);
       timer = setTimeout(function () { R.flush(); }, 1500);

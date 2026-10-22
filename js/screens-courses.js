@@ -10,18 +10,18 @@
   LZ.screens.courses = {
     show: async function (p, root, alive) {
       var data = LZ.cache.courses || null, canReg = LZ.cache.canReg, q = '';
-      if (LZ.cache.coursesBr !== LZ.branch) data = null;                                   // 지점을 바꾸면 새로 받음
+      if (LZ.cache.coursesBr !== LZ.branch) data = null;                                   // 매장을 바꾸면 새로 받음
       function list() {
         var key = u.key(q), l = data.filter(function (c) { return !key || u.key(c.name).indexOf(key) >= 0; });
         $('#cnt').textContent = key ? '"' + q + '" 검색 결과 ' + l.length + '곳' : '등록된 코스 ' + data.filter(function (c) { return c.stage === 'done'; }).length + '곳';
-        var ex = ui.expired(), homeNm = (S.user && S.user.homeName) || '기본 지점';
+        var ex = ui.expired(), homeNm = (S.user && S.user.homeName) || '기본 매장';
         $('#clist').innerHTML = l.map(function (c) {
           if (c.stage === 'front') {
             return '<div class="card" role="button" tabindex="0" data-id="' + esc(c.id) + '" data-front="1" style="border-color:var(--pri)"><div style="flex:1;min-width:0"><div class="t">' + esc(c.name) + '</div><div class="s">전반 9홀만 저장됨 · 나에게만 보여요</div><span class="chip r">후반 9홀 입력 필요</span></div><span style="font-size:24px;color:var(--mut2)" aria-hidden="true">›</span></div>';
           }
           var par = 0, m = 0; c.holes.forEach(function (h) { par += h[0]; m += h[1]; });
           return '<div class="card" role="button" tabindex="0" data-id="' + esc(c.id) + '"><div style="flex:1;min-width:0"><div class="t">' + esc(c.name) + '</div><div class="s">18홀 · 파 ' + par + ' · 총 ' + u.fmt(m) + 'm</div>' +
-            '<span class="chip ' + (c.mine ? 'y' : '') + '">내 기록 ' + c.mine + '/18홀</span>' + (!c.mine && c.homeMine ? ' <span class="chip ref" title="기본 지점 기록">' + esc(homeNm) + ' ' + c.homeMine + '홀</span>' : '') + (!ex ? ' <span class="chip">다른 회원 ' + c.others + '명</span>' : '') + '</div><span style="font-size:24px;color:var(--mut2)" aria-hidden="true">›</span></div>';
+            '<span class="chip ' + (c.mine ? 'y' : '') + '">내 기록 ' + c.mine + '/18홀</span>' + (!c.mine && c.homeMine ? ' <span class="chip ref" title="기본 매장 기록">' + esc(homeNm) + ' ' + c.homeMine + '홀</span>' : '') + (!ex ? ' <span class="chip">다른 회원 ' + c.others + '명</span>' : '') + '</div><span style="font-size:24px;color:var(--mut2)" aria-hidden="true">›</span></div>';
         }).join('') || '<div class="ann">' + (data.length ? '찾는 코스가 없어요. ' + (canReg ? '스크린에 나오는 이름 그대로 아래 버튼으로 등록할 수 있어요.' : '월간·연간회원이 되면 직접 등록할 수 있어요.') : '아직 등록된 코스가 없어요. ' + (canReg ? '아래 버튼으로 첫 코스를 등록해 보세요.' : '')) + '</div>';
         $$('#clist .card').forEach(function (c) {
           function open() { if (c.dataset.front) LZ.go('regBack', { id: c.dataset.id }); else LZ.go('holes', { id: c.dataset.id }); }
@@ -43,11 +43,11 @@
         list();
       }
       async function load(force) {
-        if (!force && data) draw();
-        else if (!data) root.innerHTML = '<div class="scr">' + ui.hdr('코스') + '<div class="bd">' + ui.skeleton(4) + '</div>' + ui.tabs('courses') + '</div>';
+        if (!data) root.innerHTML = '<div class="scr">' + ui.hdr('코스') + '<div class="bd">' + ui.skeleton(4) + '</div>' + ui.tabs('courses') + '</div>';
+        LZ.refreshMe().then(function (ch) { if (ch && alive()) LZ.softRefresh('courses'); });      // 등급·기간은 뒤에서(30초에 한 번)
         try {
-          var both = await Promise.all([LZ.api('courses', {}), LZ.refreshMe()]);
-          if (!alive()) return; data = LZ.cache.courses = both[0].courses; LZ.cache.coursesBr = LZ.branch; canReg = LZ.cache.canReg = !!both[0].canReg; draw();
+          var r = await (force ? LZ.api('courses', {}) : LZ.capi('courses', {}, { onFresh: LZ.fresh('courses') }));
+          if (!alive()) return; data = LZ.cache.courses = r.courses; LZ.cache.coursesBr = LZ.branch; canReg = LZ.cache.canReg = !!r.canReg; draw();
           if (force) ui.toast('새로 불러왔어요', 1800);
         } catch (e) {
           if (!alive()) return;
@@ -223,7 +223,7 @@
         $('#save').disabled = true; ui.busy(true, '등록하고 있어요…');
         try {
           await LZ.api('regBack', { id: c.id, holes: holesOf(st), recs: recsOf(st) }, { retry: 0 });
-          ui.busy(false); u.store.del(draftKey('back', c.id)); LZ.guard = null; LZ.cache.courses = null; LZ.cache.course = null;
+          ui.busy(false); u.store.del(draftKey('back', c.id)); LZ.guard = null; LZ.cache.courses = null; LZ.cache.course = null; LZ.cache.courseMap = {};
           ui.toast('"' + c.name + '" 18홀 등록을 마쳤어요. 이제 모든 회원에게 보여요.', 5000);
           await LZ.go('holes', { id: c.id }, { replace: true, skipGuard: true });
         } catch (e) { ui.busy(false); var sb = $('#save'); if (sb) sb.disabled = false; if ($('#err')) $('#err').textContent = ui.errText(e); }
@@ -265,7 +265,7 @@
         var body = { id: c.id, front: holesOf(H[0]) }; if (c.stage === 'done') body.back = holesOf(H[1]);
         if (staff && name !== c.name) body.name = name;
         $('#save').disabled = true; ui.busy(true, '저장하고 있어요…');
-        try { await LZ.api('editCourse', body, { retry: 0 }); ui.busy(false); LZ.cache.courses = null; LZ.cache.course = null; LZ.guard = null; ui.toast('고쳤어요'); history.back(); }
+        try { await LZ.api('editCourse', body, { retry: 0 }); ui.busy(false); LZ.cache.courses = null; LZ.cache.course = null; LZ.cache.courseMap = {}; LZ.guard = null; ui.toast('고쳤어요'); history.back(); }
         catch (e) { ui.busy(false); var sb = $('#save'); if (sb) sb.disabled = false; if ($('#err')) $('#err').textContent = ui.errText(e); }
       };
       var del = $('#del');
@@ -273,7 +273,7 @@
         if (!(await ui.confirm('이 코스를 지울까요?', '"' + c.name + '" 코스와 모든 회원의 이 코스 기록이 함께 사라져요. 되돌릴 수 없어요.', '지우기', true))) return;
         if (!(await ui.confirm('정말 지울까요?', '한 번 더 확인해요. 지우면 모든 회원의 기록이 없어져요.', '네, 지울게요', true))) return;
         ui.busy(true, '지우고 있어요…');
-        try { await LZ.api('delCourse', { id: c.id }, { retry: 0 }); ui.busy(false); LZ.cache.courses = null; LZ.cache.course = null; LZ.guard = null; ui.toast('코스를 지웠어요'); await LZ.go('courses', {}, { reset: true }); }
+        try { await LZ.api('delCourse', { id: c.id }, { retry: 0 }); ui.busy(false); LZ.cache.courses = null; LZ.cache.course = null; LZ.cache.courseMap = {}; LZ.guard = null; ui.toast('코스를 지웠어요'); await LZ.go('courses', {}, { reset: true }); }
         catch (e) { ui.busy(false); ui.toast(ui.errText(e), 5000); }
       };
     }

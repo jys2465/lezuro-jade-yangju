@@ -15,11 +15,11 @@
         (preview ? '<div class="ban b">미리 보기예요. 친구가 초대 링크를 열면 이 화면이 나와요. <button class="sm" id="inv" type="button" style="margin-top:6px">친구에게 알리기</button></div>' : '') +
         (!J.on ? '<div class="ban r">지금은 직접 가입을 받지 않아요. 매장 운영자에게 계정을 만들어 달라고 해 주세요.</div>' : '') +
         '<img class="jpic" src="assets/og-card.jpg" alt="파크골프 공략노트 소개: 홀별 공략을 기록하고 함께 보세요">' +
-        (ref && !preview ? '<div class="ban g">🎁 친구 초대 링크로 들어왔어요. 가입하면 바로 ' + J.trialDays + '일 체험이 시작돼요.</div>' : '') +
+        (ref && !preview ? '<div class="ban g" id="refb">🎁 친구 초대 링크로 들어왔어요. 가입하면 바로 ' + J.trialDays + '일 체험이 시작돼요.</div>' : '') +
         '<ul class="jfeat"><li><b>홀마다</b> 기준·방향·칸 수·타격감 기록</li><li><b>같은 매장</b> 회원 기록 참고·비교</li><li><b>결제 없이</b> ' + J.trialDays + '일 동안 모든 기능</li></ul>' +
         '<label class="lbl" for="jn">닉네임 <span style="font-size:12px">— 스크린 파크골프에서 쓰는 닉네임</span></label><input class="inp" id="jn" maxlength="8" autocomplete="off" autocapitalize="none" placeholder="한글·영문·숫자 2~8자"><div class="msg" id="jnE" role="status"></div>' +
         '<label class="lbl" for="jb">자주 가는 기본 매장</label><select class="inp" id="jb">' + brs.map(function (b) { return '<option value="' + esc(b.code) + '"' + (b.code === br ? ' selected' : '') + '>' + esc(b.name) + '</option>'; }).join('') + '</select>' +
-        '<p class="hint" style="margin-top:4px">다니는 매장이 목록에 없으면 가입한 뒤 문의하기 → <b>지점 추가 요청</b>을 남겨 주세요. 다른 매장도 언제든 골라 쓸 수 있어요.</p>' +
+        '<p class="hint" style="margin-top:4px">다니는 매장이 목록에 없으면 가입한 뒤 문의하기 → <b>매장 추가 요청</b>을 남겨 주세요. 다른 매장도 언제든 골라 쓸 수 있어요.</p>' +
         '<label class="lbl c" id="jpl">비밀번호로 쓸 숫자 4자리를 눌러 주세요</label><div id="kp"></div><div class="msg" id="jpE" role="alert" style="text-align:center"></div>' +
         '<div class="blk jagree"><b>가입 전에 확인해 주세요</b><ul><li>체험은 <b>' + J.trialDays + '일</b>이고 한 사람당 한 번이에요.</li><li>체험이 끝나면 로그인해서 내 기록만 볼 수 있어요. 이용권을 결제하면 바로 다시 써요.</li><li>내 기록은 기본으로 같은 매장 회원에게 공개돼요. 설정에서 코스마다 끌 수 있어요.</li><li>비밀번호를 잊으면 기본 매장 운영자에게 말씀해 주세요.</li></ul>' +
         '<p class="hint" style="margin:6px 0 0">받는 정보: 닉네임, 기본 매장, 휴대폰 종류(문의할 때), 결제할 때 송금 표시 이름. 전화번호·실명은 받지 않아요.</p>' +
@@ -27,6 +27,9 @@
         '<div class="msg" id="err" role="alert"></div><button class="btn" id="go" type="button"' + (preview || !J.on ? ' disabled' : '') + '>' + J.trialDays + '일 무료 체험 시작하기</button>' +
         (preview ? '' : '<p class="hint" style="text-align:center">이미 계정이 있나요? <a href="#" id="tologin" style="color:var(--rt)">로그인</a></p>') + '</div></div>';
       var nn = $('#jn'), jnE = $('#jnE'), kp;
+      if (ref && !preview) LZ.api('refName', { ref: ref }, { noAuth: true, retry: 0, timeout: 15000 }).then(function (r) {   // "○○님의 초대"
+        var b = $('#refb'); if (b && r.nick) b.innerHTML = '🎁 <b>' + esc(r.nick) + '</b>님의 초대로 가입해요. 가입하면 바로 ' + J.trialDays + '일 체험이 시작돼요.';
+      }, function () { /* 이름을 못 불러와도 가입은 그대로 */ });
       LZ.guard = preview ? null : { kind: 'form', dirty: function () { return !!nn.value.trim(); }, body: '입력한 가입 정보가 사라져요.' };
       var later = u.debounce(async function () {
         var my = ++seq, v = nn.value; if (!v) { jnE.textContent = ''; chk = null; return; }
@@ -110,7 +113,7 @@
   LZ.screens.invite = {
     show: async function (p, root, alive) {
       root.innerHTML = '<div class="scr">' + ui.hdr2('친구에게 알리기') + '<div class="bd nt">' + ui.skeleton(3) + '</div></div>';
-      var d = await LZ.api('refInfo', {}); if (!alive()) return;
+      var d = await LZ.capi('refInfo', {}, { onFresh: LZ.fresh('invite') }); if (!alive()) return;
       var link = LZ.joinUrl(d.home, d.code);
       var msg = '[파크골프 공략노트]\n스크린 파크골프 홀별 공략(방향·칸 수·타격감)을 기록하고 같은 매장 회원 기록도 참고할 수 있어요.\n지금 가입하면 5일 무료 체험!\n' + link;
       root.innerHTML = '<div class="scr">' + ui.hdr2('친구에게 알리기') + '<div class="bd nt">' +

@@ -1,4 +1,4 @@
-// 서버 시험 v3 — 통합 서버(지점별 기록), 회원번호·닉네임, 등급·결제, 신뢰도, 문의·공지, 현황판, 보안
+// 서버 시험 v3 — 통합 서버(매장별 기록), 회원번호·닉네임, 등급·결제, 신뢰도, 문의·공지, 현황판, 보안
 // 실행: node tests/server.test.js
 const assert = require('assert');
 const vm = require('vm');
@@ -35,12 +35,12 @@ function fresh() {
 
 console.log('\n[서버 시험 v3 — 통합 서버]');
 
-t('setup: 시트 14개, 지점 2곳(양주·만송), 관리자 6자리·회원번호, 매일·매주 예약, 다시 실행해도 안전', () => {
+t('setup: 시트 15개, 매장 2곳(양주·만송), 관리자 6자리·회원번호, 매일·매주 예약, 다시 실행해도 안전', () => {
   const A = fresh(); const env = A.env;
-  assert.deepStrictEqual(env.ss.sheets.map(s => s.name), ['회원', '로그인기록', '코스', '기록', '공개설정', '결제', '설정', '이력', '신뢰도', '자주묻는질문', '문의', '지점', '공지', '그림']);
+  assert.deepStrictEqual(env.ss.sheets.map(s => s.name), ['회원', '로그인기록', '코스', '기록', '공개설정', '결제', '설정', '이력', '신뢰도', '자주묻는질문', '문의', '지점', '공지', '그림', '환불신청']);
   const me = A.me(A.admin); assert.deepStrictEqual(me.branches.map(b => b.code), ['yangju', 'mansong']); assert.strictEqual(me.br, 'yangju');
   assert.ok(/^u\d+$/.test(me.user.uid)); assert.strictEqual(me.user.pinLen, 6);
-  assert.ok(/이미 준비/.test(env.ctx.setup())); assert.strictEqual(A.me(A.admin).branches.length, 2, '지점이 늘지 않음');
+  assert.ok(/이미 준비/.test(env.ctx.setup())); assert.strictEqual(A.me(A.admin).branches.length, 2, '매장이 늘지 않음');
   assert.deepStrictEqual(env.triggers.map(x => x.getHandlerFunction()).sort(), ['dailyMaintenance', 'weeklyBackup']);
   assert.strictEqual(env.call({ a: 'cfg' }).service, '파크골프 공략노트');
 });
@@ -97,14 +97,14 @@ t('닉네임: 전체에서 중복 불가, 바꾸면 기록이 따라옴, 7일에
   assert.strictEqual(env.call({ a: 'setNick', nick: '새관리' }, A.tok('관리자', ADMIN_PIN)).err, 'perm', '처음 관리자 계정은 이름 고정');
 });
 
-t('지점: 기록은 지점별, 다른 지점에서는 기본 지점 내 기록이 참고(ref)로, 지점 기억(useBranch), 기본 지점 30일에 1번', () => {
+t('매장: 기록은 매장별, 다른 매장에서는 기본 매장 내 기록이 참고(ref)로, 매장 기억(useBranch), 기본 매장 30일에 1번', () => {
   const A = fresh(); const env = A.env;
   const a = A.mk('다람쥐', 'year'), b = A.mk('너구리', 'year');
-  const cid = A.reg(a.tok, '지점코스AB');
+  const cid = A.reg(a.tok, '매장코스AB');
   A.save(a.tok, cid, [{ i: 0, rec: rec('c', 2) }], 'yangju');
   let v = env.call({ a: 'course', id: cid, br: 'mansong' }, a.tok);
-  assert.strictEqual(v.mine[0].r, '', '만송점 기록은 따로'); assert.strictEqual(v.ref.store, '제이드 양주점'); assert.strictEqual(v.ref.recs[0].n, 2, '양주(기본 지점) 내 기록 참고');
-  assert.strictEqual(env.call({ a: 'course', id: cid, br: 'yangju' }, a.tok).ref, null, '기본 지점에서는 참고 없음');
+  assert.strictEqual(v.mine[0].r, '', '만송점 기록은 따로'); assert.strictEqual(v.ref.store, '제이드 양주점'); assert.strictEqual(v.ref.recs[0].n, 2, '양주(기본 매장) 내 기록 참고');
+  assert.strictEqual(env.call({ a: 'course', id: cid, br: 'yangju' }, a.tok).ref, null, '기본 매장에서는 참고 없음');
   A.save(a.tok, cid, [{ i: 0, rec: rec('c', 5) }], 'mansong');
   assert.strictEqual(env.call({ a: 'course', id: cid, br: 'mansong' }, a.tok).mine[0].n, 5);
   assert.strictEqual(env.call({ a: 'course', id: cid, br: 'yangju' }, a.tok).mine[0].n, 2, '양주 기록은 그대로');
@@ -114,25 +114,25 @@ t('지점: 기록은 지점별, 다른 지점에서는 기본 지점 내 기록�
   const list = env.call({ a: 'courses', br: 'mansong' }, a.tok).courses.find(c => c.id === cid); assert.deepStrictEqual([list.mine, list.homeMine, list.others], [1, 1, 1]);
   assert.strictEqual(env.call({ a: 'useBranch', br: 'mansong' }, a.tok).store, '양주만송점');
   assert.strictEqual(A.login('다람쥐', a.pin).user.lastBr, 'mansong', '다음 로그인 때 만송점');
-  assert.strictEqual(A.me(a.tok).br, 'mansong', '지점을 안 보내면 마지막 지점');
+  assert.strictEqual(A.me(a.tok).br, 'mansong', '매장을 안 보내면 마지막 매장');
   const h = env.call({ a: 'setHome', br: 'mansong' }, a.tok); assert.strictEqual(h.user.home, 'mansong');
   assert.strictEqual(env.call({ a: 'setHome', br: 'yangju' }, a.tok).err, 'soon', '30일에 1번');
-  assert.strictEqual(env.call({ a: 'course', id: cid, br: 'yangju' }, a.tok).ref.store, '양주만송점', '이제 기본 지점은 만송');
+  assert.strictEqual(env.call({ a: 'course', id: cid, br: 'yangju' }, a.tok).ref.store, '양주만송점', '이제 기본 매장은 만송');
   assert.strictEqual(env.call({ a: 'me', br: 'nowhere' }, a.tok).err, 'branch');
 });
 
-t('운영자 소속 지점: 그 지점 회원만 보고 관리, 체험은 소속 지점으로, 소속은 관리자가 바꿈', () => {
+t('운영자 소속 매장: 그 매장 회원만 보고 관리, 체험은 소속 매장으로, 소속은 관리자가 바꿈', () => {
   const A = fresh(); const env = A.env;
   const om = A.mk('만송운영', 'op', { home: 'mansong' }), oy = A.mk('양주운영', 'op', { home: 'yangju' });
   const y1 = A.mk('양주회원', 'trial', { home: 'yangju' });
-  const t1 = env.call({ a: 'mCreate', nick: '만송체험', kind: 'trial', home: 'yangju' }, om.tok); assert.strictEqual(t1.member.home, 'mansong', '운영자가 만들면 소속 지점');
+  const t1 = env.call({ a: 'mCreate', nick: '만송체험', kind: 'trial', home: 'yangju' }, om.tok); assert.strictEqual(t1.member.home, 'mansong', '운영자가 만들면 소속 매장');
   assert.deepStrictEqual(env.call({ a: 'members' }, om.tok).members.map(m => m.nick).sort(), ['만송운영', '만송체험']);
-  assert.strictEqual(env.call({ a: 'mUpdate', uid: y1.uid, op: 'trialExt' }, om.tok).err, 'perm', '다른 지점 회원은 못 건드림');
+  assert.strictEqual(env.call({ a: 'mUpdate', uid: y1.uid, op: 'trialExt' }, om.tok).err, 'perm', '다른 매장 회원은 못 건드림');
   assert.ok(env.call({ a: 'mUpdate', uid: y1.uid, op: 'trialExt' }, oy.tok).ok);
   assert.strictEqual(env.call({ a: 'mUpdate', uid: oy.uid, op: 'pin' }, om.tok).err, 'perm', '운영자끼리는 못 건드림');
   assert.strictEqual(env.call({ a: 'setHome', br: 'yangju' }, om.tok).err, 'perm');
   assert.ok(env.call({ a: 'mUpdate', uid: om.uid, op: 'home', br: 'yangju' }, A.admin).ok);
-  assert.ok(env.call({ a: 'members' }, om.tok).members.some(m => m.nick === '양주회원'), '소속을 바꾸면 그 지점 회원이 보임');
+  assert.ok(env.call({ a: 'members' }, om.tok).members.some(m => m.nick === '양주회원'), '소속을 바꾸면 그 매장 회원이 보임');
   assert.strictEqual(env.call({ a: 'mCreate', nick: '월간이', kind: 'month' }, om.tok).err, 'perm', '운영자는 체험만');
   assert.strictEqual(env.call({ a: 'setCfg', price_year: 5000 }, om.tok).err, 'perm');
   assert.strictEqual(env.call({ a: 'payList' }, om.tok).err, 'perm');
@@ -156,12 +156,12 @@ t('체험 5일 + 하루씩 2번(최대 7일), 기간 끝나면 로그인·내 �
   assert.ok(env.call({ a: 'payInfo' }, tt).ok, '결제는 가능');
 });
 
-t('결제(전 지점 공통): 체험→월간·연간, 14일 전 연장 이어 붙임, 두 번 승인 막기, 환불(9,000원 기준), 만송점에서도 같은 이용권', () => {
+t('결제(전 매장 공통): 체험→월간·연간, 14일 전 연장 이어 붙임, 두 번 승인 막기, 환불(9,000원 기준), 만송점에서도 같은 이용권', () => {
   const A = fresh(); const env = A.env; const t0 = env.call({ a: 'cfg' }).today, add = env.ctx.addDays_;
   const pay = (tok, plan) => { const r = env.call({ a: 'payReq', plan }, tok); assert.ok(r.ok, JSON.stringify(r)); const d = env.call({ a: 'payDecide', id: r.pending.id, ok: 1 }, A.admin); assert.ok(d.ok, JSON.stringify(d)); return r.pending.id; };
   const m = A.mk('월체험', 'trial', { home: 'mansong' }); pay(m.tok, 'month');
   let u = A.me(m.tok).user; assert.deepStrictEqual([u.kind, u.start, u.end, u.left], ['month', t0, add(t0, 29), 29]);
-  assert.strictEqual(A.me(m.tok, 'yangju').user.st, 'active', '다른 지점에서도 같은 이용권');
+  assert.strictEqual(A.me(m.tok, 'yangju').user.st, 'active', '다른 매장에서도 같은 이용권');
   const y = A.mk('연체험', 'trial'); const pid = pay(y.tok, 'year');
   assert.strictEqual(env.call({ a: 'payRefund', id: pid }, A.admin).calc.amount, 9000);
   const w = A.mk('우리집', 'trial'); const r = env.call({ a: 'payReq', plan: 'month' }, w.tok);
@@ -174,7 +174,7 @@ t('결제(전 지점 공통): 체험→월간·연간, 14일 전 연장 이어 �
   const list = env.call({ a: 'payList' }, A.tok('관리자', ADMIN_PIN)); assert.ok(list.recent.every(p => p.nick), '결제 목록에 지금 닉네임');
 });
 
-t('신뢰도: 같은 지점 기록만 가져오기, 같은 사람·지점·코스는 1점, 다른 지점은 따로 1점, 점수는 합쳐서, 목록에 지점', () => {
+t('신뢰도: 같은 매장 기록만 가져오기, 같은 사람·매장·코스는 1점, 다른 매장은 따로 1점, 점수는 합쳐서, 목록에 매장', () => {
   const A = fresh(); const env = A.env;
   const a = A.mk('원작자', 'year'), b = A.mk('가져감', 'year');
   const cid = A.reg(a.tok, '신뢰코스AB');
@@ -183,7 +183,7 @@ t('신뢰도: 같은 지점 기록만 가져오기, 같은 사람·지점·코�
   let r = env.call({ a: 'use', cid, from: a.uid, br: 'yangju' }, b.tok); assert.ok(r.created && r.trust === 1);
   env.state.now += 60000; r = env.call({ a: 'use', cid, from: a.uid, br: 'yangju' }, b.tok); assert.ok(!r.created && r.trust === 1);
   A.save(a.tok, cid, [{ i: 0, rec: rec('c', 4) }], 'mansong');
-  env.state.now += 60000; r = env.call({ a: 'use', cid, from: a.uid, br: 'mansong' }, b.tok); assert.strictEqual(r.trust, 2, '다른 지점은 따로');
+  env.state.now += 60000; r = env.call({ a: 'use', cid, from: a.uid, br: 'mansong' }, b.tok); assert.strictEqual(r.trust, 2, '다른 매장은 따로');
   assert.strictEqual(env.call({ a: 'unuse', cid, from: a.uid, br: 'mansong' }, b.tok).removed, 1, '방금 생긴 1점은 되돌리기로 빠짐');
   env.call({ a: 'use', cid, from: a.uid, br: 'mansong' }, b.tok);
   const l = env.call({ a: 'trust' }, a.tok); assert.strictEqual(l.trust, 2); assert.deepStrictEqual(l.list.map(x => [x.user, x.store]), [['가져감', '양주만송점'], ['가져감', '제이드 양주점']]);
@@ -192,7 +192,7 @@ t('신뢰도: 같은 지점 기록만 가져오기, 같은 사람·지점·코�
   assert.strictEqual(env.call({ a: 'course', id: cid, br: 'yangju' }, b.tok).authors[0].trust, 2);
 });
 
-t('문의: 지점별(운영자는 소속 지점 문의만), 결제·지점 추가 요청은 관리자만 답변, 알림 숫자, 시험 모드', () => {
+t('문의: 매장별(운영자는 소속 매장 문의만), 결제·매장 추가 요청은 관리자만 답변, 알림 숫자, 시험 모드', () => {
   const A = fresh(); const env = A.env; env.call({ a: 'setCfg', qna_mode: 'on' }, A.admin);
   const m = A.mk('문의이', 'month'), om = A.mk('만송운영', 'op', { home: 'mansong' }), oy = A.mk('양주운영', 'op', { home: 'yangju' });
   const ask = (cat, br) => env.call({ a: 'qnaAsk', cat, title: cat, html: '<b>질문</b>', br }, m.tok).qna;
@@ -200,7 +200,7 @@ t('문의: 지점별(운영자는 소속 지점 문의만), 결제·지점 추�
   assert.deepStrictEqual(env.call({ a: 'qnaList' }, om.tok).list.map(x => x.id), [qm.id], '만송 운영자는 만송 문의만');
   assert.strictEqual(env.call({ a: 'qnaGet', id: qy.id }, om.tok).err, 'noqna');
   assert.ok(env.call({ a: 'qnaReply', id: qy.id, html: '답' }, oy.tok).ok);
-  assert.strictEqual(env.call({ a: 'qnaReply', id: qb.id, html: '답' }, oy.tok).err, 'perm', '지점 추가 요청은 관리자만');
+  assert.strictEqual(env.call({ a: 'qnaReply', id: qb.id, html: '답' }, oy.tok).err, 'perm', '매장 추가 요청은 관리자만');
   assert.ok(env.call({ a: 'qnaReply', id: qb.id, html: '만들어 드릴게요' }, A.admin).ok);
   assert.strictEqual(A.me(m.tok).qna, 2); assert.strictEqual(A.me(om.tok).qna, 1); assert.strictEqual(A.me(A.admin).qna, 1);
   const g = env.call({ a: 'qnaGet', id: qb.id }, m.tok); assert.strictEqual(g.qna.msgs[1].by, '관리자'); assert.strictEqual(g.qna.store, '제이드 양주점');
@@ -223,12 +223,12 @@ t('문의 제한·글자 꾸미기 안전·자동 정리', () => {
   env.state.now += 366 * DAY; env.ctx.dailyMaintenance(); assert.strictEqual(env.call({ a: 'qnaList' }, A.tok('관리자', ADMIN_PIN)).list.length, 0);
 });
 
-t('공지: 관리자는 모든 지점·특정 지점, 운영자는 소속 지점만, 게시 기간·상단 고정·팝업, 앱을 열 때 목록(me.notices)', () => {
+t('공지: 관리자는 모든 매장·특정 매장, 운영자는 소속 매장만, 게시 기간·상단 고정·팝업, 앱을 열 때 목록(me.notices)', () => {
   const A = fresh(); const env = A.env; const t0 = env.call({ a: 'cfg' }).today, add = env.ctx.addDays_;
   const om = A.mk('만송운영', 'op', { home: 'mansong' }), m = A.mk('회원이', 'month');
   assert.ok(env.call({ a: 'noticeSave', br: '', title: '전체 공지', html: '<b>요금</b> 안내', popup: 1 }, A.admin).ok);
   assert.ok(env.call({ a: 'noticeSave', br: 'mansong', title: '만송 오픈', html: '오픈했어요', pin: 1 }, om.tok).ok);
-  assert.strictEqual(env.call({ a: 'noticeSave', br: 'yangju', title: 'x', html: 'x' }, om.tok).err, 'perm', '운영자는 다른 지점 공지 불가');
+  assert.strictEqual(env.call({ a: 'noticeSave', br: 'yangju', title: 'x', html: 'x' }, om.tok).err, 'perm', '운영자는 다른 매장 공지 불가');
   assert.strictEqual(env.call({ a: 'noticeSave', br: '', title: 'x', html: 'x' }, om.tok).err, 'perm', '운영자는 전체 공지 불가');
   assert.strictEqual(env.call({ a: 'noticeSave', br: '', title: 'x', html: 'x' }, m.tok).err, 'perm', '회원은 불가');
   env.call({ a: 'noticeSave', br: '', title: '나중 공지', html: '곧', start: add(t0, 3) }, A.admin);
@@ -241,7 +241,7 @@ t('공지: 관리자는 모든 지점·특정 지점, 운영자는 소속 지점
   env.state.now += 4 * DAY; assert.ok(env.call({ a: 'noticeList', br: 'yangju' }, A.tok('회원이', m.pin)).list.some(n => n.title === '나중 공지'), '시작일이 되면 보임');
 });
 
-t('현황판: 지점별 회원 수·오늘 접속·곧 끝나는 회원·최근 가입·입금 대기·답변 대기, 이번 달 결제는 관리자만', () => {
+t('현황판: 매장별 회원 수·오늘 접속·곧 끝나는 회원·최근 가입·입금 대기·답변 대기, 이번 달 결제는 관리자만', () => {
   const A = fresh(); const env = A.env; env.call({ a: 'setCfg', qna_mode: 'on' }, A.admin);
   const om = A.mk('만송운영', 'op', { home: 'mansong' });
   const a = A.mk('양주월간', 'month', { home: 'yangju' }), b = A.mk('만송체험', 'trial', { home: 'mansong' }), c = A.mk('만송연간', 'year', { home: 'mansong' });
@@ -253,11 +253,11 @@ t('현황판: 지점별 회원 수·오늘 접속·곧 끝나는 회원·최근 
   assert.strictEqual(d.month.amount, 9000); assert.strictEqual(d.pending, 1); assert.strictEqual(d.qnaOpen, 1); assert.ok(d.today >= 4);
   assert.ok(d.soon.some(x => x.nick === '대기이'), '체험 5일 → 곧 끝남'); assert.strictEqual(d.recent.length, 4);
   const dm = env.call({ a: 'dash', br: 'mansong' }, A.admin); assert.strictEqual(dm.total.all, 3);
-  const od = env.call({ a: 'dash', br: 'yangju' }, om.tok); assert.strictEqual(od.br, 'mansong', '운영자는 소속 지점만'); assert.strictEqual(od.month, undefined, '운영자에게 결제 금액 없음'); assert.strictEqual(od.qnaOpen, 1);
+  const od = env.call({ a: 'dash', br: 'yangju' }, om.tok); assert.strictEqual(od.br, 'mansong', '운영자는 소속 매장만'); assert.strictEqual(od.month, undefined, '운영자에게 결제 금액 없음'); assert.strictEqual(od.qnaOpen, 1);
   assert.strictEqual(env.call({ a: 'dash' }, a.tok).err, 'perm');
 });
 
-t('지점 관리(관리자): 지점 추가(앱에서 바로), 코드 규칙, 이름 바꾸기, 닫으면 회원은 못 고름', () => {
+t('매장 관리(관리자): 매장 추가(앱에서 바로), 코드 규칙, 이름 바꾸기, 닫으면 회원은 못 고름', () => {
   const A = fresh(); const env = A.env;
   const m = A.mk('회원이', 'year');
   assert.strictEqual(env.call({ a: 'branchSave', code: 'Su Yu', name: '강북수유점', create: 1 }, A.admin).err, 'bad');
@@ -265,11 +265,11 @@ t('지점 관리(관리자): 지점 추가(앱에서 바로), 코드 규칙, 이
   assert.ok(A.me(m.tok).branches.some(b => b.code === 'suyu'), '회원에게 바로 보임');
   assert.strictEqual(env.call({ a: 'me', br: 'suyu' }, m.tok).store, '강북수유점');
   env.call({ a: 'branchSave', code: 'suyu', name: '수유점', active: 0 }, A.admin);
-  assert.ok(!A.me(m.tok).branches.some(b => b.code === 'suyu'), '닫으면 안 보임'); assert.strictEqual(env.call({ a: 'me', br: 'suyu' }, m.tok).br, 'yangju', '닫힌 지점을 보내면 기본 지점으로');
-  assert.strictEqual(env.call({ a: 'me', br: 'suyu' }, A.admin).br, 'suyu', '관리자는 닫힌 지점도 볼 수 있음');
+  assert.ok(!A.me(m.tok).branches.some(b => b.code === 'suyu'), '닫으면 안 보임'); assert.strictEqual(env.call({ a: 'me', br: 'suyu' }, m.tok).br, 'yangju', '닫힌 매장을 보내면 기본 매장으로');
+  assert.strictEqual(env.call({ a: 'me', br: 'suyu' }, A.admin).br, 'suyu', '관리자는 닫힌 매장도 볼 수 있음');
   assert.strictEqual(env.call({ a: 'setHome', br: 'suyu' }, m.tok).err, 'branch');
   assert.strictEqual(env.call({ a: 'branchSave', code: 'x1', name: 'x', create: 1 }, m.tok).err, 'perm');
-  assert.strictEqual(env.call({ a: 'cfg', br: 'mansong' }).store, '양주만송점', '로그인 화면용 지점 이름');
+  assert.strictEqual(env.call({ a: 'cfg', br: 'mansong' }).store, '양주만송점', '로그인 화면용 매장 이름');
 });
 
 t('보안: 잠금이 점점 길어짐(10분→1시간→하루), 닉네임별·전체 시도 수 제한, 운영진 6자리, 쉬운 번호 거절, 다른 폰 로그아웃', () => {
@@ -314,7 +314,7 @@ t('코스 권한: 등록자(회원번호)·운영자는 고치기, 이름은 운
   const H = Array.from({ length: 9 }, () => [3, 40]);
   assert.ok(env.call({ a: 'editCourse', id: cid, front: H }, a.tok).ok);
   assert.strictEqual(env.call({ a: 'editCourse', id: cid, front: H }, b.tok).err, 'perm');
-  assert.ok(env.call({ a: 'editCourse', id: cid, front: H, name: '권한코스CD', br: 'mansong' }, op.tok).ok, '어느 지점 운영자든 코스 수정(코스는 공통)');
+  assert.ok(env.call({ a: 'editCourse', id: cid, front: H, name: '권한코스CD', br: 'mansong' }, op.tok).ok, '어느 매장 운영자든 코스 수정(코스는 공통)');
   assert.strictEqual(env.call({ a: 'editCourse', id: cid, name: '바꿔AB' }, a.tok).err, 'perm');
   assert.strictEqual(env.call({ a: 'delCourse', id: cid }, op.tok).err, 'perm'); assert.ok(env.call({ a: 'delCourse', id: cid }, A.admin).ok);
 });
@@ -400,7 +400,7 @@ t('직접 가입 악용 막기: 한 폰 30일에 1번(그 닉네임 알려 줌),
   assert.strictEqual(env.call({ a: 'cfg' }).join.on, false);
   assert.strictEqual(env.call({ a: 'join', nick: '넷째', pin: '2580', br: 'yangju', agree: 1, dev: DEV(5) }).err, 'off');
 });
-t('운영자: 소속 지점 체험회원 이용 중지 가능(월간은 불가), 관리자 닉네임 정리(예전 이름 바로 풀림), 닉네임 확인 요청은 관리자만 답변', () => {
+t('운영자: 소속 매장 체험회원 이용 중지 가능(월간은 불가), 관리자 닉네임 정리(예전 이름 바로 풀림), 닉네임 확인 요청은 관리자만 답변', () => {
   const A = fresh(); const env = A.env; const op = A.mk('운영', 'op');
   const j = env.call({ a: 'join', nick: '장난', pin: '2580', br: 'yangju', agree: 1, dev: DEV(6) }); const mo = A.mk('월간', 'month');
   assert.ok(env.call({ a: 'mUpdate', uid: j.user.uid, op: 'active', on: 0 }, op.tok).ok, '체험 중지');
@@ -458,10 +458,10 @@ t('공지 그림·단추: 그림 올리기(나눠 저장)·불러오기, 단추�
   assert.ok(env.call({ a: 'noticeDel', id: n.id }, A.admin).ok); assert.strictEqual(env.call({ a: 'imgGet', id: up.id }, m.tok).err, 'noimg', '공지를 지우면 그림도');
 });
 
-t('배포 전 점검 보완: 관리자 회원 목록은 모든 지점(br 빈 값), 결제 처리 중 오류면 다시 누를 수 있음, 긴 문의는 안내, 쓰이지 않는 그림 정리, 그림 캐시', () => {
+t('배포 전 점검 보완: 관리자 회원 목록은 모든 매장(br 빈 값), 결제 처리 중 오류면 다시 누를 수 있음, 긴 문의는 안내, 쓰이지 않는 그림 정리, 그림 캐시', () => {
   const A = fresh(); const env = A.env;
   const ms = A.mk('만송회원', 'month', { home: 'mansong' });
-  assert.ok(env.call({ a: 'members', br: '' }, A.admin).members.some(m => m.nick === '만송회원'), '양주점에 있어도 모든 지점 회원');
+  assert.ok(env.call({ a: 'members', br: '' }, A.admin).members.some(m => m.nick === '만송회원'), '양주점에 있어도 모든 매장 회원');
   assert.ok(!env.call({ a: 'members', br: 'yangju' }, A.admin).members.some(m => m.nick === '만송회원'));
   /* 결제 처리 중 오류 → 표시가 남지 않아 다시 처리 가능 */
   const t = env.call({ a: 'join', nick: '결제왕', pin: '2580', br: 'yangju', agree: 1, dev: 'ab'.repeat(16) });
@@ -483,6 +483,67 @@ t('배포 전 점검 보완: 관리자 회원 목록은 모든 지점(br 빈 값
   env.state.now += 2 * DAY; env.ctx.dailyMaintenance();
   assert.strictEqual(env.call({ a: 'imgGet', id: lost }, A.admin).err, 'noimg', '안 쓰인 그림 정리');
   delete env.cache['img:' + keep]; assert.strictEqual(env.call({ a: 'imgGet', id: keep }, A.admin).data, img, '공지 그림은 남음');
+});
+
+t('추천인 보완: 초대 링크 이름 보여 주기, 결제 목록에 추천인·보상 예정, 관리자가 추천인 정하기(첫 결제 전까지·자기 자신·서로·같은 폰 막음)', () => {
+  const A = fresh(); const env = A.env; const me = A.mk('소개왕', 'month');
+  assert.strictEqual(env.call({ a: 'refName', ref: me.uid }).nick, '소개왕');
+  assert.strictEqual(env.call({ a: 'refName', ref: 'u999' }).nick, '');
+  const f = env.call({ a: 'join', nick: '그냥가입', pin: '2580', br: 'yangju', agree: 1, dev: 'cd'.repeat(16) });
+  const mem = () => env.call({ a: 'members', br: '' }, A.admin).members.find(m => m.nick === '그냥가입');
+  assert.deepStrictEqual([mem().refNick, mem().canRef], ['', 1]);
+  assert.strictEqual(env.call({ a: 'mUpdate', uid: f.user.uid, op: 'ref', to: '그냥가입' }, A.admin).err, 'bad', '자기 자신');
+  assert.strictEqual(env.call({ a: 'mUpdate', uid: f.user.uid, op: 'ref', to: '없는사람' }, A.admin).err, 'nouser');
+  const op = A.mk('운영', 'op');
+  assert.strictEqual(env.call({ a: 'mUpdate', uid: f.user.uid, op: 'ref', to: '소개왕' }, op.tok).err, 'perm', '운영자는 못 정함');
+  assert.ok(env.call({ a: 'mUpdate', uid: f.user.uid, op: 'ref', to: '소개왕' }, A.admin).ok);
+  assert.strictEqual(mem().refNick, '소개왕');
+  assert.strictEqual(env.call({ a: 'mUpdate', uid: me.uid, op: 'ref', to: '그냥가입' }, A.admin).err, 'bad', '서로 추천 불가');
+  const pr = env.call({ a: 'payReq', plan: 'month', method: 'kakao' }, f.token);
+  const pl = env.call({ a: 'payList' }, A.admin).pending.find(x => x.id === pr.pending.id); assert.deepStrictEqual([pl.refNick, pl.refWill, pl.refDone], ['소개왕', 7, 0]);
+  const d = env.call({ a: 'payDecide', id: pr.pending.id, ok: 1 }, A.admin); assert.strictEqual(d.reward.nick, '소개왕');
+  const rc = env.call({ a: 'payList' }, A.admin).recent.find(x => x.id === pr.pending.id); assert.deepStrictEqual([rc.refNick, rc.refThis], ['소개왕', 7]);
+  assert.strictEqual(env.call({ a: 'mUpdate', uid: f.user.uid, op: 'ref', to: '' }, A.admin).err, 'bad', '첫 결제 뒤에는 못 바꿈');
+  assert.deepStrictEqual([mem().canRef, mem().refPaid], [0, 1]);
+  /* 운영진을 추천인으로 정하면 결제 목록에 "보상 없음" */
+  const g = env.call({ a: 'join', nick: '운영소개', pin: '2580', br: 'yangju', agree: 1, dev: 'ef'.repeat(16) });
+  assert.ok(env.call({ a: 'mUpdate', uid: g.user.uid, op: 'ref', to: '운영' }, A.admin).ok);
+  const p2 = env.call({ a: 'payReq', plan: 'month', method: 'kakao' }, g.token);
+  assert.strictEqual(env.call({ a: 'payList' }, A.admin).pending.find(x => x.id === p2.pending.id).refWill, 0);
+});
+
+t('환불 신청: 회원이 은행·계좌·예금주를 적어 신청(본인 화면은 일부 * 가림) → 관리자만 전체 번호 → 송금 후 완료(신청한 날 기준 계산·기간 끝냄) → 시트에서도 전체 번호 지움, 반려·취소', () => {
+  const A = fresh(); const env = A.env; const m = A.mk('환불왕', 'trial'); const op = A.mk('운영', 'op');
+  const pr = env.call({ a: 'payReq', plan: 'year', method: 'kakao' }, m.tok); assert.ok(env.call({ a: 'payDecide', id: pr.pending.id, ok: 1 }, A.admin).ok);
+  let info = env.call({ a: 'refundInfo' }, m.tok); assert.ok(info.state.can && info.calc.full && info.calc.amount === 9000, JSON.stringify(info.calc));
+  assert.strictEqual(A.me(m.tok).refund.can, 1);
+  const base = { a: 'refundReq', bank: '카카오뱅크', acct: '3333-05-8835107', holder: '주영수', reason: '이사', agree: 1 };
+  assert.strictEqual(env.call(Object.assign({}, base, { acct: '12' }), m.tok).err, 'bad');
+  assert.strictEqual(env.call(Object.assign({}, base, { agree: 0 }), m.tok).err, 'bad');
+  const r = env.call(base, m.tok); assert.ok(r.ok, JSON.stringify(r));
+  assert.deepStrictEqual([r.state.req.acct, r.state.req.holder, r.state.req.amount], ['333*-**-****107', '주*수', 9000], '본인 화면은 가림');
+  assert.strictEqual(env.call(base, m.tok).err, 'dup', '두 번 신청 불가');
+  assert.strictEqual(env.call({ a: 'refundList' }, op.tok).err, 'perm', '운영자는 못 봄');
+  env.state.now += 20 * DAY;                                                         // 관리자가 늦게 처리해도 신청한 날 기준
+  const L = env.call({ a: 'refundList' }, A.admin); assert.deepStrictEqual([L.pending[0].acct, L.pending[0].holder, L.pending[0].nick], ['3333-05-8835107', '주영수', '환불왕'], '관리자는 전체 번호');
+  const done = env.call({ a: 'refundDecide', id: L.pending[0].id, ok: 1 }, A.admin); assert.strictEqual(done.amount, 9000, '신청할 때 전액 조건이면 전액');
+  assert.strictEqual(env.call({ a: 'refundDecide', id: L.pending[0].id, ok: 1 }, A.admin).err, 'nopay', '두 번 처리 안 됨');
+  const sh = env.ss.getSheetByName('환불신청'); assert.deepStrictEqual([sh.getRange(2, 7).getValue(), sh.getRange(2, 8).getValue()], ['333*-**-****107', '주*수'], '시트에서도 전체 번호 지움');
+  const me = A.me(m.tok); assert.strictEqual(me.user.st, 'expired', '이용 끝'); assert.deepStrictEqual([me.refund.recent.status, me.refund.recent.amount, me.refund.can], ['done', 9000, 0]);
+  assert.strictEqual(env.call({ a: 'payList' }, A.admin).recent.find(x => x.id === pr.pending.id).status, 'refunded');
+  /* 반려 · 취소 */
+  const m2 = A.mk('반려왕', 'trial');
+  const p2 = env.call({ a: 'payReq', plan: 'month', method: 'kakao' }, m2.tok); env.call({ a: 'payDecide', id: p2.pending.id, ok: 1 }, A.admin);
+  assert.ok(env.call(Object.assign({}, base, { acct: '110-123-456789', holder: '김철수' }), m2.tok).ok);
+  assert.ok(env.call({ a: 'refundCancel' }, m2.tok).ok); assert.strictEqual(A.me(m2.tok).refund.can, 1, '취소하면 다시 신청 가능');
+  assert.ok(env.call(Object.assign({}, base, { acct: '110-123-456789', holder: '김철수' }), m2.tok).ok);
+  env.state.now += 20 * DAY;
+  assert.ok(/환불 신청 중에는 결제할 수 없어요/.test(env.call({ a: 'payReq', plan: 'month', method: 'kakao' }, m2.tok).msg || ''), '환불 신청 중에는 결제 막음');
+  const id2 = env.call({ a: 'refundList' }, A.admin).pending[0].id;
+  assert.ok(env.call({ a: 'refundDecide', id: id2, ok: 0, note: '이용 기간이 거의 끝났어요' }, A.admin).ok);
+  const st = A.me(m2.tok).refund; assert.deepStrictEqual([st.recent.status, st.recent.note, st.recent.acct], ['rejected', '이용 기간이 거의 끝났어요', '110-***-***789']);
+  assert.strictEqual(A.me(m2.tok).user.st, 'active', '반려면 이용 그대로');
+  assert.strictEqual(env.call({ a: 'dash' }, A.admin).refundReq, 0);
 });
 
 console.log(`\n결과: ${ok} 통과 / ${bad} 실패`); process.exit(bad ? 1 : 0);
