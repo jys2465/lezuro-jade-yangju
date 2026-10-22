@@ -1,6 +1,6 @@
 /* 서비스 워커 — 앱 껍데기를 기기에 저장해서 더 빨리 열리게 합니다.
  * ★ 파일을 고쳐 GitHub 에 올릴 때마다 아래 VERSION 숫자를 올리세요. (모든 기기가 새 버전으로 바뀝니다) */
-const VERSION = '3.1.0';
+const VERSION = '3.1.1';
 const CACHE = 'lezuro-' + VERSION;
 const SHELL = [
   './', 'index.html', 'manifest.json', 'css/app.css',
