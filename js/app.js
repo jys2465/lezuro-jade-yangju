@@ -211,6 +211,7 @@
     if (me.br) LZ.setBranch(me.br, me.store);
   };
   LZ.afterLogin = async function (user, me) {
+    if (LZ.noteAct) LZ.noteAct();                                             // 로그인한 때부터 30분을 셈
     S.user = user; u.store.set('lz.nick', user.nick); LZ.cache = {};
     if (!user.must) u.store.set('lz.plen', String(user.pinLen || 4));
     /* 매장: 링크의 ?s= → 마지막에 쓴 매장 → 기본 매장 */
@@ -314,6 +315,7 @@
       var keep = { store: cfg.store, logoVer: cfg.logoVer, logos: cfg.logos || cached.logos };
       if (cfg.branches) S.branches = cfg.branches;
       if (cfg.join) S.join = cfg.join;
+      if (cfg.idleMin !== undefined) S.idleMin = cfg.idleMin;
       if (LZ.branch && cfg.branch !== LZ.branch) { LZ.setBranch(''); LZ.branchFromUrl = false; }   // 없어진 매장 코드(예전 링크)면 서버가 정하게
       S.store = cfg.store || S.store;
       applyCfg(keep); u.store.setJSON('lz.cfg', keep);
@@ -329,14 +331,19 @@
       if (me0 && (me0.nick.toLowerCase() === nk || (me0.prev || '').toLowerCase() === nk)) { u.store.set('lz.nick', me0.nick); await LZ.afterLogin(me0, mine); return; }
       LZ.api('logout', {}, { retry: 0, timeout: 5000 }).catch(function () {}); S.token = null; u.store.del('lz.t'); u.store.del('lz.pend');
     }
+    var loginMsg = '';
+    if (S.token && LZ.idleOver()) {                                          // 앱을 닫아 둔 사이에 30분이 지남 → 자동 로그아웃
+      try { fetch(LZ.API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ a: 'logout', t: S.token }), keepalive: true }).catch(function () {}); } catch (e) { /* 무시 */ }
+      S.token = null; u.store.del('lz.t'); loginMsg = (S.idleMin || 30) + '분 동안 쓰지 않아서 자동으로 로그아웃됐어요. 다시 로그인해 주세요.';
+    }
     if (S.token) {
       try { var me = await LZ.api('me', {}); u.store.del('lz.ref'); await LZ.afterLogin(me.user, me); return; }
       catch (e) {
         if (e && e.code !== 'auth') { LZ.screens.fatal(e); return; }       // 인터넷 문제 등: 로그아웃시키지 않고 다시 시도 안내
-        S.token = null; u.store.del('lz.t');
+        S.token = null; u.store.del('lz.t'); loginMsg = e.message || '';
       }
     }
-    await LZ.go('login', {}, { reset: true });
+    await LZ.go('login', loginMsg ? { msg: loginMsg } : {}, { reset: true });
     if (LZ.wantJoin && S.join && S.join.on) await LZ.go('join', {});                // 초대 링크·QR(?join=1)은 가입 화면으로 바로
   }
   LZ.screens.fatal = function (e) {

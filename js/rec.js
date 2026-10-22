@@ -25,7 +25,7 @@
     function q(s) { return $(s, host); }
     function upd() {
       var s = u.sent(rec);
-      q('[data-sent]').innerHTML = s ? u.sentHTML(rec) : '<span class="none">기준을 하나 골라 주세요</span>';
+      q('[data-sent]').innerHTML = s ? u.sentHTML(rec, o.holeM) : '<span class="none">기준을 하나 골라 주세요</span>';
       $$('[data-ref]', host).forEach(function (b) { b.classList.toggle('on', b.dataset.ref === rec.r); });
       q('[data-un]').style.display = rec.r === 'u' ? 'block' : 'none';
       var sv = sig(rec), out = q('[data-dir]');
@@ -34,7 +34,8 @@
       out.innerHTML = '<b>' + (sv > 0 ? '+' + sv : sv < 0 ? '−' + (-sv) : '0') + '</b><small>' + (sv < 0 ? '좌측 ' + (-sv) + '칸' : sv > 0 ? '우측 ' + sv + '칸' : '그대로') + '</small>';
       var pi = q('[data-pin]'); if (document.activeElement !== pi) pi.value = String(rec.p >= 8 && rec.p <= 40 ? rec.p : u.PW0);
       if (!(rec.p >= 8 && rec.p <= 40)) rec.p = u.PW0;
-      q('[data-pm]').innerHTML = '<b style="font-size:1.25em;color:var(--ink)">' + rec.p + '(' + u.pwM(rec.p) + 'M) 정도</b>' + (rec.p === u.PW0 ? ' <span style="color:var(--mut)">(기본값)</span>' : '');
+      q('[data-pm]').innerHTML = '<b style="font-size:1.25em;color:var(--ink)">' + rec.p + '(' + u.pwM(rec.p) + 'M) 정도</b>' + (rec.p === u.PW0 ? ' <span style="color:var(--mut)">(기본값)</span>' : '') +
+        (o.holeM ? '<div class="pwline">이 홀 ' + u.fm(o.holeM) + 'm · ' + u.pwMark(rec.p, o.holeM, { num: 1 }) + '</div>' : '');
       q('[data-pclear]').style.visibility = rec.p !== u.PW0 ? 'visible' : 'hidden';
       q('[data-cnt]').textContent = (rec.o || '').length + '/20';
     }

@@ -93,9 +93,63 @@
     return run(tries).then(function (d) { if (!READS.test(a)) LZ.capiClear(); return d; });
   };
 
+  /* ───── 앱을 닫거나 다른 앱으로 가면 "접속 중"을 바로 끝냄(로그인은 유지) → 돌아오면 다시 접속 중 ─────
+   * 화면이 가려질 때는 보통 요청이 끝까지 못 가서, 닫혀도 전달되는 sendBeacon 을 써요. */
+  var awaySent = false;
+  function bye() {
+    if (!LZ.S || !LZ.S.token || awaySent || !LZ.API) return;
+    awaySent = true;
+    var body = JSON.stringify({ a: 'bye', t: LZ.S.token });
+    try { if (navigator.sendBeacon && navigator.sendBeacon(LZ.API, new Blob([body], { type: 'text/plain;charset=utf-8' }))) return; } catch (e) { /* 아래로 */ }
+    try { fetch(LZ.API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: body, keepalive: true }); } catch (e) { /* 무시 */ }
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') bye();
+    else if (LZ.S && LZ.S.token && LZ.idleOver()) { awaySent = false; LZ.autoLogout(); }          // 닫아 둔 사이에 30분이 지났으면 바로 로그아웃
+    else if (awaySent && LZ.S && LZ.S.token) { awaySent = false; lastAct = Date.now(); lastPing = Date.now(); LZ.api('ping', {}, { retry: 0, timeout: 15000 }).catch(function () { /* 무시 */ }); }
+  });
+  window.addEventListener('pagehide', bye);
   /* ───── 좌석 유지: 최근 1분 안에 화면을 만졌을 때만 1분마다 알림(10분 동안 움직임이 없으면 서버가 좌석을 비움) ───── */
-  var lastAct = Date.now(), lastPing = Date.now();
-  ['pointerdown', 'keydown', 'scroll', 'touchstart'].forEach(function (ev) { window.addEventListener(ev, function () { lastAct = Date.now(); }, { passive: true, capture: true }); });
+  var lastAct = Date.now(), lastPing = Date.now(), actSaved = 0;
+  LZ.noteAct = function () {                                               // 화면을 만질 때마다(15초에 한 번 기기에 적어 둠: 앱을 닫았다 열어도 이어서 셈)
+    lastAct = Date.now();
+    if (lastAct - actSaved > 15000) { actSaved = lastAct; u.store.set('lz.act', String(lastAct)); }
+    if (warnEl) closeWarn();
+  };
+  ['pointerdown', 'keydown', 'scroll', 'touchstart'].forEach(function (ev) { window.addEventListener(ev, LZ.noteAct, { passive: true, capture: true }); });
+
+  /* ───── 30분 동안 쓰지 않으면 자동 로그아웃(회원·운영자·관리자 모두) — 2분 전에 "계속 쓰기" 안내 ───── */
+  var warnEl = null, autoBusy = false;
+  function idleLim() { var m = LZ.S && LZ.S.idleMin; return (m === undefined || m === null ? 30 : +m) * 60000; }
+  LZ.idleOver = function () { var lim = idleLim(), last = Math.max(lastAct, +u.store.get('lz.act') || 0); return lim > 0 && Date.now() - last > lim; };
+  function closeWarn() { if (warnEl && warnEl.parentNode) warnEl.parentNode.removeChild(warnEl); warnEl = null; }
+  function showWarn(ms) {
+    var sec = Math.max(1, Math.round(ms / 1000));
+    if (!warnEl) {
+      warnEl = document.createElement('div'); warnEl.className = 'idlew'; warnEl.setAttribute('role', 'alertdialog');
+      warnEl.innerHTML = '<div class="box"><b>곧 자동으로 로그아웃돼요</b><p data-idles></p><button type="button" class="btn" data-idlego>계속 쓰기</button></div>';
+      document.body.appendChild(warnEl);
+      warnEl.querySelector('[data-idlego]').onclick = function () { LZ.noteAct(); closeWarn(); LZ.api('ping', {}, { retry: 0, timeout: 15000 }).catch(function () {}); };
+    }
+    var p = warnEl.querySelector('[data-idles]'); if (p) p.textContent = Math.round(idleLim() / 60000) + '분 동안 쓰지 않아서 ' + (sec >= 60 ? Math.ceil(sec / 60) + '분' : sec + '초') + ' 뒤에 로그아웃돼요. 계속 쓰려면 아래 단추를 눌러 주세요.';
+  }
+  LZ.autoLogout = async function () {
+    if (autoBusy || !LZ.S || !LZ.S.token) return; autoBusy = true; closeWarn();
+    try { if (LZ.rec && LZ.rec.dirty()) await Promise.race([LZ.rec.flush(), u.sleep(4000)]); } catch (e) { /* 저장 못 한 기록은 기기에 남아 다음 로그인 때 이어서 저장 */ }
+    var body = JSON.stringify({ a: 'logout', t: LZ.S.token });
+    try { fetch(LZ.API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: body, keepalive: true }).catch(function () {}); } catch (e) { /* 무시 */ }
+    LZ.guard = null;
+    if (LZ.onAuthLost) LZ.onAuthLost(Math.round(idleLim() / 60000) + '분 동안 쓰지 않아서 자동으로 로그아웃됐어요. 다시 로그인해 주세요.');
+    autoBusy = false;
+  };
+  LZ.idleCheck = function () {
+    if (!LZ.S || !LZ.S.token) { closeWarn(); return; }
+    var lim = idleLim(); if (!lim) return;
+    var idle = Date.now() - Math.max(lastAct, +u.store.get('lz.act') || 0);
+    if (idle > lim) LZ.autoLogout();
+    else if (idle > lim - 120000 && document.visibilityState === 'visible') showWarn(lim - idle);
+  };
+  setInterval(LZ.idleCheck, 5000);
   LZ.notePing = function () { lastPing = Date.now(); };
   setInterval(function () {
     if (!LZ.S || !LZ.S.token || waiting || document.visibilityState !== 'visible') return;

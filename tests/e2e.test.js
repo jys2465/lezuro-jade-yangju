@@ -162,10 +162,20 @@ const WAKE = () => { window.__wl = { req: 0, rel: 0, active: 0 }; Object.defineP
     await M.fill('[data-pin]', '20');
     const s = await text(M, '[data-sent]'); assert.ok(/최초화면에서 좌측 2칸/.test(s) && /20\(65M\)/.test(s), s);
     assert.ok(!/왼쪽/.test(await text(M)));
+    assert.strictEqual(await M.$eval('[data-pm] .pwk.up i', e => e.textContent), '▲▲▲', '51.5m 홀에 65M → 빨간 ▲ 3개');
+    assert.ok(/\+13\.5M 세게/.test(await text(M, '[data-pm]')), await text(M, '[data-pm]'));
+    await M.click('[data-ps="-1"]'); await M.click('[data-ps="-1"]'); assert.strictEqual(await M.$eval('[data-pm] .pwk.up i', e => e.textContent), '▲', '18(55M) → ▲ 1개');
+    await M.click('[data-ps="-1"]'); assert.ok(await M.$('[data-pm] .pwk.ok'), '17(50M) vs 51.5m → 초록 ●');
+    await M.click('[data-ps="-1"]'); await M.click('[data-ps="-1"]'); assert.strictEqual(await M.$eval('[data-pm] .pwk.dn i', e => e.textContent), '▼▼▼', '15(40M) vs 51.5m(11.5M 차이) → 파란 ▼ 3개');
+    await M.fill('[data-pin]', '20');
+    const marks = await M.evaluate(() => [[17, 50], [17, 52], [17, 52.5], [17, 58], [40, 50], [8, 100], [21, 72], [18, 50], [18, 49.5], [19, 50], [21, 50], [22, 50], [22, 50.5], [12, 50]].map(x => { const d = document.createElement('div'); d.innerHTML = LZ.u.pwMark(x[0], x[1]); const k = d.firstChild; return k.className.replace('pwk ', '') + ':' + k.querySelector('i').textContent; }));
+    assert.deepStrictEqual(marks, ['ok:●', 'ok:●', 'dn:▼', 'dn:▼▼', 'up:▲▲▲▲▲↑', 'dn:▼▼▼▼▼↓', 'ok:●', 'up:▲', 'up:▲▲', 'up:▲▲', 'up:▲▲▲▲', 'up:▲▲▲▲▲↑', 'up:▲▲▲▲▲', 'dn:▼▼▼▼▼↓'], marks.join(','));
     assert.ok(await waitFor(() => { const r = recsOf('다람쥐'); return r && r[1].r === 'f' && r[1].n === 2 && r[1].d === 'L' && r[1].p === 20; }), '시트 저장');
     await M.waitForFunction(() => /자동 저장됨/.test(document.querySelector('#sv').textContent));
     assert.ok(await M.evaluate(() => __wl.active === 1)); await shot(M, 'c4-edit');
-    await M.click('[data-back]'); await waitScr(M, 'holes'); await M.click('[data-back]'); await waitScr(M, 'courses');
+    await M.click('[data-back]'); await waitScr(M, 'holes');
+    assert.ok(/▲▲▲/.test(await text(M, '#ht .rw.me >> nth=1')), '코스 표 내 기록 줄에도 ▲▲▲'); assert.ok(await M.$('.pwleg'), '표 아래 ● ▲ ▼ 설명');
+    await shot(M, 'c4-marks'); await M.click('[data-back]'); await waitScr(M, 'courses');
     assert.ok(await M.evaluate(() => __wl.active === 0), '코스 화면을 나가면 꺼짐 방지 해제');
   });
 
@@ -559,9 +569,47 @@ const WAKE = () => { window.__wl = { req: 0, rel: 0, active: 0 }; Object.defineP
     const sh = env.ss.getSheetByName('환불신청'); let full = false; for (let r = 2; r <= sh.getLastRow(); r++) if (/8835107/.test(sh.getRange(r, 7).getValue())) full = true; assert.ok(!full, '시트에도 전체 번호 없음');
     /* 로그아웃: 설정이 아닌 화면에서도 위쪽 단추로 */
     await R.click(`.card[data-id="${cid}"]`); await waitScr(R, 'holes'); assert.ok(await R.$('.hd2 [data-logout]'), '안쪽 화면에도 로그아웃 단추');
+    /* 앱을 닫으면(화면 가려짐) 바로 "지금 접속 중" 아님, 다시 열면 접속 중 */
+    const at9 = admTok(), onl = () => env.call({ a: 'members', br: '' }, at9).members.find(m => m.nick === '환불회원').online;
+    assert.strictEqual(onl(), 1);
+    await R.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' }); document.dispatchEvent(new Event('visibilitychange')); });
+    assert.ok(await waitFor(() => onl() === 0, 5000), '앱 닫으면 바로 접속 중 아님');
+    await R.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' }); document.dispatchEvent(new Event('visibilitychange')); });
+    assert.ok(await waitFor(() => onl() === 1, 5000), '다시 열면 접속 중');
     await R.click('.hd2 [data-logout]'); await dlg(R, '로그아웃'); await waitScr(R, 'login'); assert.ok(!(await R.$('[data-logout]')), '로그인 화면에는 없음');
+    assert.strictEqual(onl(), 0, '로그아웃하면 바로 접속 중 아님(관리자 화면)');
     assert.strictEqual(await R.evaluate(() => localStorage.getItem('lz@app.t')), null);
     await R.close();
+  });
+  await t('I1 로그인 유지 끄기 → 브라우저를 닫으면(새 창) 로그아웃 / 30분 동안 안 쓰면: 2분 전 "계속 쓰기" 안내 → 누르면 계속 → 또 30분 지나면 자동 로그아웃(안내 문구), 앱을 닫아 둔 채 30분 지나 다시 열어도 로그아웃', async () => {
+    /* A. 로그인 유지 끄기 */
+    const K = await phone('공용폰'); await K.goto('http://localhost:8801/?u=' + encodeURIComponent('너구리')); await waitScr(K, 'login');
+    assert.ok(await K.isChecked('#keep'), '처음엔 로그인 유지 켜짐'); await K.uncheck('#keep');
+    await pad(K, '6482'); await K.click('#go'); await waitScr(K, 'courses'); await dismiss(K);
+    assert.ok(await K.evaluate(() => !localStorage.getItem('lz@app.t') && !!sessionStorage.getItem('lz@app.t')), '브라우저를 닫으면 지워지는 곳에 보관');
+    const K2 = await K.context().newPage(); await K2.goto('http://localhost:8801/'); await waitScr(K2, 'login');
+    assert.ok(!(await K2.isChecked('#keep')), '다음에도 끈 상태 기억'); await K2.close(); await K.close();
+    /* B. 30분 자동 로그아웃 (시계를 앞으로 돌려서 시험) */
+    env.ctx.setSetting_('idle_logout_min', 30);
+    const Z = await phone('쉬는폰'); await Z.clock.install();
+    const zc = sel => Z.evaluate(q => document.querySelector(q).click(), sel), zpad = async d => { for (const c of d) await zc(`#app .pad button[data-k="${c}"]`); };
+    const zdis = async () => { for (let i = 0; i < 8; i++) { await sleep(400); await Z.evaluate(() => { const b = [...document.querySelectorAll('.dlg .btn')].find(x => /확인/.test(x.textContent)); if (b) b.click(); }); } };
+    try {
+      await Z.goto('http://localhost:8801/?u=' + encodeURIComponent('다람쥐')); await waitScr(Z, 'login'); await zpad('7391'); await zc('#go'); await waitScr(Z, 'courses'); await zdis();
+      await Z.clock.fastForward('28:30'); await Z.waitForSelector('.idlew'); assert.ok(/곧 자동으로 로그아웃돼요/.test(await text(Z, '.idlew'))); await shot(Z, 'i1-idle-warn');
+      await zc('[data-idlego]'); await Z.waitForSelector('.idlew', { state: 'detached' });
+      await Z.clock.fastForward('20:00'); assert.strictEqual(await scr(Z), 'courses', '계속 쓰기 뒤에는 유지');
+      await Z.clock.fastForward('11:00'); await waitScr(Z, 'login', 15000);
+      assert.ok(/30분 동안 쓰지 않아서 자동으로 로그아웃됐어요/.test(await text(Z)), await text(Z, '.ban')); await shot(Z, 'i1-idle-out');
+      assert.strictEqual(await Z.evaluate(() => localStorage.getItem('lz@app.t')), null);
+      /* 앱을 닫아 둔 채(화면 가려짐) 30분 → 다시 열면 로그아웃 */
+      await zpad('7391'); await zc('#go'); await waitScr(Z, 'courses'); await zdis();
+      await Z.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' }); document.dispatchEvent(new Event('visibilitychange')); });
+      await Z.clock.fastForward('31:00');
+      await Z.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' }); document.dispatchEvent(new Event('visibilitychange')); });
+      await waitScr(Z, 'login', 15000); assert.ok(/자동으로 로그아웃/.test(await text(Z)));
+    } finally { env.ctx.setSetting_('idle_logout_min', 0); }
+    await Z.close();
   });
   await t('H3 없는 매장 코드로 보내면 서버가 거절', async () => {
     const r = await A.evaluate(async () => { const res = await fetch(LZ.API, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ a: 'me', t: LZ.S.token, br: 'uijeongbu' }) }); return res.json(); });

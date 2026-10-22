@@ -22,6 +22,7 @@ function apiServer(env, log) {
 function start(o) {
   o = o || {};
   const env = createEnv(), msg = env.ctx.setup(), pin = msg.match(/처음 비밀번호: (\d{6})/)[1];
+  if (!o.idle) env.ctx.setSetting_('idle_logout_min', 0);                   // 30분 자동 로그아웃은 I1 시험에서만 켬
   const nt = env.ss.getSheetByName('공지'); if (!o.promoPopup && nt && nt.getLastRow() >= 2) nt.getRange(2, 8).setValue(0);   // 홍보 공지 팝업은 따로 시험(J5)
   const log = { posts: 0, options: 0, delay: 0, fail: false, actions: [] };
   const api = apiServer(env, log);

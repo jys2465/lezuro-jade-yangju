@@ -23,7 +23,7 @@
     try { var mine = cur.mine, n = await load(cur.course.id, uid); n.mine = mine; LZ.cache.course = n; ui.busy(false); return n; }
     catch (e) { ui.busy(false); ui.toast(ui.errText(e), 4500); return null; }
   }
-  function rowSent(r) { return u.sentHTML(r) + (r && r.o ? '<small>참고사항: ' + esc(r.o) + '</small>' : ''); }
+  function rowSent(r, m) { return u.sentHTML(r, m) + (r && r.o ? '<small>참고사항: ' + esc(r.o) + '</small>' : ''); }   // m: 홀 거리 → ● ▲ ▼
   function sameRec(a, b) { return a.r === b.r && (a.r !== 'u' || u.key(a.t) === u.key(b.t)) && a.d === b.d && (a.n | 0) === (b.n | 0) && (a.p | 0) === (b.p | 0) && (a.o || '') === (b.o || ''); }
   function maxHole(c) { return c.stage === 'done' ? 18 : 9; }
 
@@ -96,7 +96,7 @@
           '<div class="seg" id="half" style="margin:0 4px"><button type="button" data-h="0" class="' + (half ? '' : 'on') + '">전반 9홀</button><button type="button" data-h="1" class="' + (half ? 'on' : '') + '">후반 9홀</button></div>' +
           '<div class="row2" style="margin:6px 4px"><label class="chk"><input type="checkbox" id="om" ' + (onlyMine ? 'checked' : '') + '>내 기록만 보기</label><span style="display:flex;gap:6px"><button class="sm" id="zm" type="button" aria-label="표 작게">작게</button><button class="sm" id="zp" type="button" aria-label="표 크게">크게</button></span></div>' +
           '<div class="hint" style="margin:0 6px 6px"><span id="zl"></span> · ' + (half ? '1홀(10홀) ~ 9홀(18홀)' : '1홀 ~ 9홀') + ' · 옆으로 밀면 전반↔후반</div>' +
-          '<div class="zoomwrap" id="zw"><div id="ht"></div></div><p class="hint" style="margin:6px 6px 2px">' + (ex ? '' : '"내 기록" 줄을 누르면 크게 보고 고칠 수 있어요. ') + '두 손가락으로 벌려서 키울 수도 있어요.</p></div></div>';
+          '<div class="zoomwrap" id="zw"><div id="ht"></div></div><p class="hint" style="margin:6px 6px 2px">' + (ex ? '' : '"내 기록" 줄을 누르면 크게 보고 고칠 수 있어요. ') + '두 손가락으로 벌려서 키울 수도 있어요.</p><p class="hint pwleg" style="margin:2px 6px"><span class="pwk ok"><i>●</i></span> 거리와 맞음(±2M) · <span class="pwk up"><i>▲</i></span> 더 세게 · <span class="pwk dn"><i>▼</i></span> 더 약하게 (5M까지 1개, 10M까지 2개 … 25M 이상은 ▲▲▲▲▲↑)</p></div></div>';
         ui.wakeBan($('#wk'));
         $('#info') && ($('#info').onclick = function () { LZ.go('courseEdit', { id: c.id }); });
         $('#req') && ($('#req').onclick = function () { LZ.go('qnaNew', { cat: 'course', cid: c.id, cname: c.name, title: (c.name + ' 수정 요청').slice(0, 30) }); });
@@ -129,9 +129,9 @@
         var from = half * 9, h = '', o = cur.pick && !ui.expired() && !onlyMine ? cur.pick.recs : null;
         for (var i = from; i < from + 9; i++) {
           h += '<div class="hole"><div class="hh"><b>' + u.LBL(i) + '</b><span class="chip y" style="padding:1px 8px">파 ' + c.holes[i][0] + '</span><span>' + u.fm(c.holes[i][1]) + 'm</span></div>' +
-            (o ? '<div class="rw"><div class="nm">' + esc(cur.pick.nick) + '님<small style="display:block;color:var(--pri);font-size:11px">신뢰도 ' + (cur.pick.trust || 0) + '점</small></div><div class="tx">' + rowSent(o[i]) + '</div></div>' : '') +
-            (cur.ref && cur.ref.recs[i] && cur.ref.recs[i].r ? '<div class="rw ref"><div class="nm">' + esc(cur.ref.store) + '<small style="display:block;font-size:11px">내 기록(참고)</small></div><div class="tx">' + rowSent(cur.ref.recs[i]) + '</div></div>' : '') +
-            '<div class="rw me" role="button" tabindex="0" data-i="' + i + '"><div class="nm">내 기록</div><div class="tx">' + rowSent(cur.mine[i]) + '</div></div></div>';
+            (o ? '<div class="rw"><div class="nm">' + esc(cur.pick.nick) + '님<small style="display:block;color:var(--pri);font-size:11px">신뢰도 ' + (cur.pick.trust || 0) + '점</small></div><div class="tx">' + rowSent(o[i], c.holes[i][1]) + '</div></div>' : '') +
+            (cur.ref && cur.ref.recs[i] && cur.ref.recs[i].r ? '<div class="rw ref"><div class="nm">' + esc(cur.ref.store) + '<small style="display:block;font-size:11px">내 기록(참고)</small></div><div class="tx">' + rowSent(cur.ref.recs[i], c.holes[i][1]) + '</div></div>' : '') +
+            '<div class="rw me" role="button" tabindex="0" data-i="' + i + '"><div class="nm">내 기록</div><div class="tx">' + rowSent(cur.mine[i], c.holes[i][1]) + '</div></div></div>';
         }
         var ht = $('#ht'); ht.innerHTML = h; ht.style.width = $('#zw').clientWidth + 'px'; ht.style.zoom = zoom; $('#zl').textContent = '표 크기 ' + Math.round(zoom * 100) + '%';
         $$('#ht .rw.me').forEach(function (r) {
@@ -194,7 +194,7 @@
       off = LZ.rec.on(function (s) { if (!alive()) { off(); return; } showStatus(s); });
       showStatus(LZ.rec.status());
 
-      LZ.recUI($('#rh'), rec, { disabled: ex, msg: '이용 기간이 끝나서 기록을 고칠 수 없어요.', onChange: function (r) { LZ.rec.queue(c.id, i, r); } });
+      LZ.recUI($('#rh'), rec, { disabled: ex, holeM: c.holes[i][1], msg: '이용 기간이 끝나서 기록을 고칠 수 없어요.', onChange: function (r) { LZ.rec.queue(c.id, i, r); } });
       if (cur.ref && $('#refh')) {
         var rr = cur.ref.recs[i];
         $('#refh').textContent = cur.ref.store + ' 내 기록 (참고)\n' + (u.sent(rr) || '기록 없음') + (rr.o ? '\n참고사항: ' + rr.o : '');
@@ -249,7 +249,7 @@
           if (r.k === 'same') cnt.same++; else if (r.k === 'diff' || r.k === 'ref') cnt.diff++; else if (r.k !== 'none') cnt.one++;
           if (onlyDiff && (r.k === 'same' || r.k === 'none')) continue;
           var cls = r.k === 'same' ? 'same' : r.k === 'diff' ? 'diff' : r.k === 'ref' ? 'ref' : 'one';
-          rows.push('<div class="cmpc"><div class="hh"><b>' + u.LBL(i) + '</b><span class="chip y" style="padding:1px 8px">파 ' + c.holes[i][0] + '</span><span>' + u.fm(c.holes[i][1]) + 'm</span></div><div class="bd2"><div class="vs"><span class="k">내 기록</span><span>' + u.sentHTML(a) + '</span><span class="k">' + esc(nk) + '님</span><span>' + u.sentHTML(b) + '</span></div>' +
+          rows.push('<div class="cmpc"><div class="hh"><b>' + u.LBL(i) + '</b><span class="chip y" style="padding:1px 8px">파 ' + c.holes[i][0] + '</span><span>' + u.fm(c.holes[i][1]) + 'm</span></div><div class="bd2"><div class="vs"><span class="k">내 기록</span><span>' + u.sentHTML(a, c.holes[i][1]) + '</span><span class="k">' + esc(nk) + '님</span><span>' + u.sentHTML(b, c.holes[i][1]) + '</span></div>' +
             (r.k === 'none' ? '' : '<div class="res ' + cls + '">' + esc(r.t) + '</div>') +
             ((r.k === 'theirs' || r.k === 'diff' || r.k === 'ref') ? '<button class="sm" type="button" data-take="' + i + '" style="margin-top:6px">이 홀 ' + esc(nk) + '님 기록으로</button>' : '') +
             ' <button class="sm" type="button" data-ed="' + i + '" style="margin-top:6px">내 기록 고치기</button></div></div>');

@@ -15,7 +15,9 @@
           (editing ? '<label class="lbl" for="nick">닉네임</label><input class="inp" id="nick" value="' + esc(saved) + '" autocomplete="username" autocapitalize="none" maxlength="8" placeholder="닉네임">'
             : '<div class="row2" style="margin:14px 0 4px"><div style="font-size:20px"><b>' + esc(saved) + '</b>님</div><button class="sm" id="other" type="button">다른 닉네임</button></div>') +
           '<label class="lbl c" id="kpl">비밀번호 숫자 ' + plen + '자리를 눌러 주세요</label><div id="kp"></div><p class="hint" style="text-align:center;margin:0"><a href="#" id="plen" style="color:var(--mut)">' + (plen === 6 ? '4자리 비밀번호로 들어가기' : '운영자·관리자(6자리) 비밀번호로 들어가기') + '</a></p><div class="msg" id="err" role="alert" style="text-align:center"></div>' +
-          '<button class="btn" id="go" type="button" style="margin-top:6px">로그인</button><p class="hint" style="text-align:center">비밀번호를 잊으셨나요? 매장 운영자에게 말씀해 주세요.</p>' +
+          '<button class="btn" id="go" type="button" style="margin-top:6px">로그인</button>' +
+          '<label class="chk keep"><input type="checkbox" id="keep"' + (u.store.get('lz.keep') === '0' ? '' : ' checked') + '> 이 휴대폰에서 로그인 유지</label>' +
+          '<p class="hint" style="text-align:center;margin-top:0">가족과 같이 쓰는 휴대폰이면 체크를 끄세요. 끄면 브라우저를 닫을 때 로그아웃돼요. 30분 동안 쓰지 않으면 누구나 자동으로 로그아웃돼요.</p><p class="hint" style="text-align:center">비밀번호를 잊으셨나요? 매장 운영자에게 말씀해 주세요.</p>' +
           (P.standalone() ? '' : '<p class="hint" style="text-align:center"><a href="#" id="howto" style="color:var(--rt)">홈 화면에 추가하는 방법</a></p>') +
           (S.join && S.join.on ? '<div class="joinbox"><div class="t">처음이세요?</div><button class="btn y" id="join" type="button">' + (S.join.trialDays || 5) + '일 무료 체험 시작하기</button><ul class="jfeat"><li>홀별 방향·칸 수·타격감 기록</li><li>같은 매장 회원 기록 참고·비교</li><li>결제 없이 바로 시작, 1분이면 가입</li></ul></div>' : '') + '</div></div>';
         var kp = ui.keypad($('#kp'), plen, function () { $('#err').textContent = ''; });
@@ -30,6 +32,7 @@
           $('#go').disabled = true; ui.busy(true, '확인하고 있어요…');
           try {
             var r = await LZ.api('login', { nick: nick, pin: kp.value, dev: P.device }, { noAuth: true, retry: 0 });
+            u.store.set('lz.keep', $('#keep') && !$('#keep').checked ? '0' : '1');
             S.token = r.token; u.store.set('lz.t', r.token); ui.busy(false);
             if (r.branches) S.branches = r.branches;
             await LZ.afterLogin(r.user);

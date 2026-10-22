@@ -48,6 +48,7 @@ var LIM = {
   touchMs: 60000, seenSaveMs: 5 * 60000, queueStaleMs: 45000,
   renewDays: 14, trialDays: 5, trialExtMax: 2, refundFullDays: 7,
   nickEveryDays: 7, nickProtectDays: 7, homeEveryDays: 30,
+  idleLogoutMin: 30,          // 30분 동안 쓰지 않으면 자동 로그아웃(회원·운영자·관리자 모두). 설정 idle_logout_min 으로 바꿈(0 = 끔)
   joinDevDays: 30,            // 한 휴대폰에서 직접 체험 가입은 30일에 1번
   joinPerHour: 30,            // 서버 전체 1시간 직접 가입 수(하루 한도는 관리자 설정 join_per_day, 처음 100)
   backupWeeks: 8
@@ -56,7 +57,7 @@ function pinLen_(u) { return u && (u.kind === 'admin' || u.kind === 'op') ? 6 : 
 
 var SH = {
   users:    ['nick', 'kind', 'start', 'end', 'hash', 'salt', 'must', 'active', 'fail', 'lock', 'created', 'last', 'ext', 'seen', 'uid', 'home', 'homeAt', 'nickAt', 'prev', 'prevUntil', 'lastBr', 'lockN', 'plen', 'src', 'dev', 'ref', 'refPay'],
-  sessions: ['th', 'uid', 'exp', 'dev', 'created'],
+  sessions: ['th', 'uid', 'exp', 'dev', 'created', 'act'],
   courses:  ['id', 'name', 'key', 'reg', 'holes', 'created', 'upd', 'updBy', 'stage'],
   records:  ['cid', 'uid', 'filled', 'json', 'upd', 'br'],
   prefs:    ['uid', 'cid', 'pub'],
@@ -116,7 +117,7 @@ function run_(h, ctx, q) {
   }
 }
 function authed_(h, q) {
-  var ctx = session_(String(q.t || ''));
+  var ctx = session_(String(q.t || ''), !h.noTouch);
   var u = ctx.u, st = ctx.st;
   ctx.br = pickBranch_(u, q.br);
   if (!h.noSeat) seat_(u);
@@ -310,19 +311,44 @@ function userInfo_(u) {
 
 function newSession_(u, dev) {
   var t = rand_(48), th = sha_(t), exp = Date.now() + LIM.sessionDays * 86400000;
-  append_('sessions', [th, u.uid, exp, String(dev || '').slice(0, 60), Date.now()]);
+  append_('sessions', [th, u.uid, exp, String(dev || '').slice(0, 60), Date.now(), Date.now()]);
+  cache_().put('sa:' + th, String(Date.now()), 21600);
   cput_('s:' + th, { n: u.uid, e: exp });
   return t;
 }
-function session_(t) {
+function idleMin_() { var v = cfg_().idle_logout_min; return v === undefined || v === '' ? LIM.idleLogoutMin : num_(v); }
+/** 마지막으로 앱을 쓴 때(로그인 기록별): 캐시 → 없으면 시트. 시트에는 3분에 한 번만 적음 */
+function sessAct_(th) {
+  var c = num_(cache_().get('sa:' + th)); if (c) return { at: c, row: 0 };
+  var r = rows_('sessions');
+  for (var i = 0; i < r.length; i++) if (eq_(r[i][0], th)) return { at: num_(r[i][5]), row: i + 2, sheet: num_(r[i][5]) };
+  return { at: 0, row: 0 };
+}
+function touchSess_(th, now) {
+  var c = cache_(), last = num_(c.get('sa:' + th)), saved = num_(c.get('sw:' + th));
+  c.put('sa:' + th, String(now), 21600);
+  if (now - saved < 3 * 60000) return;
+  var r = rows_('sessions');
+  for (var i = 0; i < r.length; i++) if (eq_(r[i][0], th)) { sheet_('sessions').getRange(i + 2, 6).setValue(now); c.put('sw:' + th, String(now), 21600); return; }
+}
+function session_(t, touch) {
   if (!t) throw E_('auth', '다시 로그인해 주세요.');
-  var th = sha_(t), s = cget_('s:' + th);
+  var th = sha_(t), s = cget_('s:' + th), now = Date.now();
   if (!s) {
     var r = rows_('sessions');
     for (var i = 0; i < r.length; i++) if (eq_(r[i][0], th)) { s = { n: str_(r[i][1]), e: num_(r[i][2]) }; break; }
     if (s) cput_('s:' + th, s);
   }
-  if (!s || s.e < Date.now()) throw E_('auth', '로그인 기간이 끝났어요. 다시 로그인해 주세요.');
+  if (!s || s.e < now) throw E_('auth', '로그인 기간이 끝났어요. 다시 로그인해 주세요.');
+  var im = idleMin_();
+  if (im > 0) {                                                             // 오래 쓰지 않으면 자동 로그아웃
+    var a = sessAct_(th);
+    if (a.at && now - a.at > im * 60000) {
+      rewrite_('sessions', function (x) { return !eq_(x[0], th); }); cache_().remove('s:' + th); cache_().remove('sa:' + th); freeSeat_(s.n);
+      throw E_('auth', im + '분 동안 쓰지 않아서 자동으로 로그아웃됐어요. 다시 로그인해 주세요.', { idle: 1 });
+    }
+    if (touch !== false) touchSess_(th, now); else if (!a.at) cache_().put('sa:' + th, String(now), 21600);
+  }
   var u = userByUid_(s.n);
   if (!u || !u.active) throw E_('auth', '이 계정은 지금 쓸 수 없어요. 운영자에게 문의해 주세요.');
   var st = statusOf_(u);
@@ -337,7 +363,13 @@ function dropSessions_(uid, exceptTh) {
   rewrite_('sessions', function (r) { if (str_(r[1]) === uid && String(r[0]) !== exceptTh) { cache_().remove('s:' + String(r[0])); return false; } return true; });
   if (!exceptTh) freeSeat_(uid);
 }
-function purgeSessions_() { var now = Date.now(); rewrite_('sessions', function (r) { if (num_(r[2]) < now) { cache_().remove('s:' + String(r[0])); return false; } return true; }); }
+function purgeSessions_() {
+  var now = Date.now(), im = idleMin_();
+  rewrite_('sessions', function (r) {
+    var idle = im > 0 && num_(r[5]) && now - num_(r[5]) > im * 60000 && now - num_(cache_().get('sa:' + String(r[0]))) > im * 60000;
+    if (num_(r[2]) < now || idle) { cache_().remove('s:' + String(r[0])); return false; } return true;
+  });
+}
 
 /* ───────────── 동시 사용 좌석과 대기열 ───────────── */
 
@@ -374,7 +406,7 @@ function aCfg(q) {
   var c = cfg_(), ver = num_(c.logo_ver), b = findBranch_(q.br) || findBranch_(firstBranch_());
   var jc = joinCfg_();
   var out = { ok: true, service: SERVICE, branch: b ? b.code : '', store: b ? b.name : '', branches: branchList_(false), logoVer: ver, today: today_(),
-    join: { on: jc.on, trialDays: LIM.trialDays, refOn: jc.refOn, refDays: jc.refDays } };
+    join: { on: jc.on, trialDays: LIM.trialDays, refOn: jc.refOn, refDays: jc.refDays }, idleMin: idleMin_() };
   if (ver && Number(q.lv) !== ver) { var s = settings_(); out.logos = { dark: joinLogo_(s, 'dark'), light: joinLogo_(s, 'light') }; }
   return out;
 }
@@ -507,6 +539,20 @@ function aMe(q, ctx) {
     trust: trustMap_()[u.uid] || 0, qnaOn: qnaOn_(u), qna: qnaBadge_(u), notices: noticeHeads_(ctx.br), refund: refundState_(u) };
 }
 function aPing() { return { ok: true }; }
+/** 앱을 닫거나 다른 앱으로 갔을 때(화면이 가려짐): 로그인은 그대로 두고 "접속 중"만 바로 끝냄.
+ *  자리는 2분 뒤에 비워서, 카카오톡을 잠깐 보고 돌아와도 대기 없이 바로 이어 써요. */
+function aBye(q, ctx) {
+  var uid = ctx.u.uid, now = Date.now(), c = cache_();
+  c.remove('seen:' + uid); c.put('away:' + uid, String(now), 21600);
+  var seats = cget_('seats') || {};
+  if (seats[uid]) { seats[uid] = Math.min(seats[uid], now - LIM.idleMs + 120000); cput_('seats', seats); }
+  return { ok: true };
+}
+/** 지금 접속 중인지: 최근 10분 안에 앱을 쓰고, 그 뒤에 나가거나(앱 닫기) 로그아웃하지 않았을 때 */
+function onlineAt_(uid, seenC, seats, awayC, now) {
+  var act = Math.max(num_(seenC['seen:' + uid]), seats[uid] || 0), away = num_(awayC['away:' + uid]);
+  return { act: act, online: act && now - act < LIM.idleMs && !(away && away > act) ? 1 : 0 };
+}
 function aLogout(q, ctx) { rewrite_('sessions', function (r) { return !eq_(r[0], ctx.th); }); cache_().remove('s:' + ctx.th); freeSeat_(ctx.u.uid); return { ok: true }; }
 function aPin(q, ctx) {
   var u = ctx.u, len = pinLen_(u), pin = String(q.pin === undefined ? '' : q.pin);
@@ -1303,15 +1349,16 @@ function aMembers(q, ctx) {
   var me = ctx.u, now = Date.now(), users = users_().filter(function (u) { return inScope_(me, u) || u.uid === me.uid; });
   if (me.kind === 'admin' && q.br) users = users.filter(function (u) { return u.home === q.br || (q.br === '_staff' && isStaff_(u)); });
   var keys = users.map(function (u) { return 'seen:' + u.uid; }), seen = cache_().getAll ? cache_().getAll(keys) : {};
+  var awayC = cache_().getAll ? cache_().getAll(users.map(function (u) { return 'away:' + u.uid; })) : {};
   var seats = cget_('seats') || {}, cnt = {}, rr = rows_('records'), pend = {}, tm = trustMap_(), devN = {}, map = nickMap_(), paid = {};
   pays_().forEach(function (p) { if (p.status === 'ok' || p.status === 'refunded') paid[p.uid] = 1; });
   users_().forEach(function (u) { if (u.dev) devN[u.dev] = (devN[u.dev] || 0) + 1; });
   for (var i = 0; i < rr.length; i++) if (num_(rr[i][2]) > 0) { var k = str_(rr[i][1]); cnt[k] = (cnt[k] || 0) + 1; }
   pays_().forEach(function (p) { if (p.status === 'pending') pend[p.uid] = 1; });
   var list = users.map(function (u) {
-    var s = Math.max(num_(seen['seen:' + u.uid]), u.seen || 0, seats[u.uid] || 0);
+    var on = onlineAt_(u.uid, seen, seats, awayC, now), s = Math.max(on.act, u.seen || 0);   // 접속 중은 앱이 알려 준 것만(시트의 마지막 접속 시각은 표시용)
     var stale = u.src === 'self' && u.kind === 'trial' && statusOf_(u) === 'expired' && u.end && diffDays_(u.end, today_()) > 30 && now - s > 30 * 86400000 ? 1 : 0;
-    return memberView_(u, { seenAt: s, online: now - s < LIM.idleMs ? 1 : 0, courses: cnt[u.uid] || 0, pendingPay: pend[u.uid] || 0, trust: tm[u.uid] || 0, sameDev: u.dev ? devN[u.dev] - 1 : 0, stale: stale,
+    return memberView_(u, { seenAt: s, online: on.online, courses: cnt[u.uid] || 0, pendingPay: pend[u.uid] || 0, trust: tm[u.uid] || 0, sameDev: u.dev ? devN[u.dev] - 1 : 0, stale: stale,
       refNick: u.ref ? nickOf_(u.ref, map) : '', refPaid: u.refPay ? 1 : 0, canRef: !isStaff_(u) && !paid[u.uid] ? 1 : 0 });
   });
   var order = { admin: 0, op: 1, year: 2, month: 3, trial: 4 };
@@ -1535,6 +1582,7 @@ var H = {
   me:         { mustOk: 1, fn: aMe },
   ping:       { mustOk: 1, fn: aPing },
   logout:     { w: 1, noSeat: 1, mustOk: 1, fn: aLogout },
+  bye:        { noSeat: 1, mustOk: 1, noTouch: 1, fn: aBye },
   pin:        { w: 1, mustOk: 1, fn: aPin },
   setNick:    { w: 1, fn: aSetNick },
   setHome:    { w: 1, fn: aSetHome },

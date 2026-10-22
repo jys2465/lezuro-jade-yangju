@@ -74,7 +74,7 @@ h1,h2,h3,h4{font-weight:500;margin:0}
 .rw .nm{padding:0.25rem;text-align:center;font-size:0.8125rem;color:var(--mut);line-height:1.25;word-break:keep-all;overflow-wrap:anywhere}.rw.me .nm{color:var(--ink);font-weight:500}
 .rw .tx{padding:0.375rem 0.5rem 0.375rem 2px;font-size:0.9375rem;line-height:1.5}.rw .tx small{display:block;font-size:0.75rem;color:var(--mut)}
 .none{color:var(--mut2);font-size:0.875rem}
-.pw{display:block;font-size:0.875rem;color:var(--lnk);margin-top:2px}.pw:before{content:'● ';color:var(--yel)}
+.pw{display:block;font-size:0.875rem;color:var(--lnk);margin-top:2px}.pw .pwk{margin-left:0.375rem}
 .lnk{background:none;border:0;color:var(--lnk);text-decoration:underline;font-size:0.875rem;min-height:2.25rem;padding:0 0.25rem}
 .dv{display:inline-block;padding:1px 0.5rem;border-radius:0.5rem;font-weight:500}.dv.L{background:var(--bb);color:var(--ink)}.dv.R{background:var(--rb);color:var(--rt)}
 .zoomwrap{overflow-x:auto;touch-action:pan-x pan-y}
@@ -179,3 +179,11 @@ button,a,[role=button],input,select,label{touch-action:manipulation}
 .hd2 .thm{width:2.25rem;min-width:2.25rem;height:2.25rem;margin-left:0.25rem;border-radius:0.625rem}.hd2 .thm svg{width:1.25rem;height:1.25rem}.hd2 .outb i{display:none}
 /* 회원 관리 필터: 칸이 많으면 줄바꿈 */
 .seg.flt{flex-wrap:wrap}.seg.flt button{flex:1 0 30%;min-height:2.5rem}
+.chk.keep{justify-content:center;margin:0.375rem 0 0}
+.idlew{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:120;display:flex;align-items:center;justify-content:center;padding:1.25rem}.idlew .box{background:var(--sf);border-radius:1.125rem;padding:1.375rem 1.125rem;max-width:26.25rem;width:100%;text-align:center}.idlew b{font-size:1.25rem;display:block;margin-bottom:0.5rem}.idlew p{font-size:1rem;line-height:1.6;color:var(--tx2);margin:0 0 0.875rem}
+/* 홀 거리와 타격감: ● 맞음 / ▲ 더 세게 / ▼ 더 약하게 */
+.pwk{display:inline-flex;align-items:center;gap:0.25rem;white-space:nowrap;vertical-align:1px;font-weight:500}.pwk i{font-style:normal;letter-spacing:-1px;font-size:.95em}.pwk small{font-size:.85em}
+.pwk.ok{color:#16A34A}.pwk.up{color:#DC2626}.pwk.dn{color:#2563EB}
+html[data-theme="dark"] .pwk.ok{color:#4ADE80}html[data-theme="dark"] .pwk.up{color:#F87171}html[data-theme="dark"] .pwk.dn{color:#60A5FA}
+.pwline{margin-top:0.25rem;font-size:0.9375rem;color:var(--tx2)}.pwline .pwk{font-size:1rem}
+.pwk .far{font-weight:700;margin-left:1px}

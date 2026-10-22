@@ -11,8 +11,9 @@ const rec = (r, n, d = 'R', p = 17, tt = '', o = '') => ({ r, n, d, p, t: tt, o 
 const PINS4 = ['7391', '6482', '5273', '4164', '3925', '2816', '1947', '8053'];
 const ADMIN_PIN = '825913';
 
-function fresh() {
+function fresh(o = {}) {
   const env = createEnv(); const msg = env.ctx.setup(); const pin = msg.match(/처음 비밀번호: (\d{6})/)[1];
+  if (!o.idle) env.ctx.setSetting_('idle_logout_min', 0);                 // 날짜를 건너뛰는 시험이 많아서 자동 로그아웃은 따로 시험
   const A = { env, n: 0 };
   A.call = (p, tok) => env.call(p, tok);
   A.login = (nick, p) => env.call({ a: 'login', nick, pin: p, dev: 'test' });
@@ -544,6 +545,38 @@ t('환불 신청: 회원이 은행·계좌·예금주를 적어 신청(본인 �
   const st = A.me(m2.tok).refund; assert.deepStrictEqual([st.recent.status, st.recent.note, st.recent.acct], ['rejected', '이용 기간이 거의 끝났어요', '110-***-***789']);
   assert.strictEqual(A.me(m2.tok).user.st, 'active', '반려면 이용 그대로');
   assert.strictEqual(env.call({ a: 'dash' }, A.admin).refundReq, 0);
+});
+
+t('지금 접속 중: 앱을 쓰면 접속 중 → 앱을 닫으면(bye) 바로 아님(로그인은 그대로) → 다시 열면 접속 중 → 로그아웃하면 바로 아님(마지막 접속 시각은 남음)', () => {
+  const A = fresh(); const env = A.env; const m = A.mk('접속왕', 'month');
+  const on = () => env.call({ a: 'members', br: '' }, A.admin).members.find(x => x.nick === '접속왕');
+  assert.ok(env.call({ a: 'courses' }, m.tok).ok); assert.strictEqual(on().online, 1);
+  env.state.now += 2000; assert.ok(env.call({ a: 'bye' }, m.tok).ok); assert.strictEqual(on().online, 0, '앱 닫으면 바로 접속 중 아님');
+  assert.ok(A.me(m.tok).ok, '로그인은 그대로'); assert.strictEqual(on().online, 1, '다시 열면 접속 중');
+  env.state.now += 2000; assert.ok(env.call({ a: 'logout' }, m.tok).ok);
+  const x = on(); assert.strictEqual(x.online, 0, '로그아웃하면 바로 접속 중 아님'); assert.ok(x.seenAt > 0, '마지막 접속 시각은 남음');
+  const k = A.mk('운영', 'op'); assert.ok(env.call({ a: 'members' }, k.tok).ok);
+  assert.strictEqual(env.call({ a: 'members', br: '' }, A.admin).members.find(y => y.nick === '운영').online, 1, '운영진도 같은 규칙');
+  env.call({ a: 'bye' }, k.tok); assert.strictEqual(env.call({ a: 'members', br: '' }, A.admin).members.find(y => y.nick === '운영').online, 0);
+});
+
+t('30분 자동 로그아웃: 회원·운영자·관리자 모두 30분 동안 안 쓰면 서버가 로그아웃(안내 문구), 쓰는 동안에는 유지, 앱 닫기(bye)는 쓴 것으로 치지 않음', () => {
+  const A = fresh({ idle: true }); const env = A.env; const m = A.mk('쉬는왕', 'month'); const op = A.mk('운영', 'op');
+  assert.strictEqual(env.call({ a: 'cfg' }).idleMin, 30);
+  for (let i = 0; i < 4; i++) { env.state.now += 20 * 60000; assert.ok(A.me(m.tok).ok, '20분마다 쓰면 계속 유지'); }
+  env.state.now += 29 * 60000; env.call({ a: 'bye' }, m.tok);
+  env.state.now += 2 * 60000; const r = A.me(m.tok); assert.strictEqual(r.err, 'auth'); assert.ok(/30분 동안 쓰지 않아서/.test(r.msg), r.msg);
+  assert.strictEqual(A.me(m.tok).err, 'auth', '다시 써도 로그아웃 상태');
+  assert.ok(A.login('쉬는왕', m.pin).ok, '다시 로그인하면 됨');
+  env.state.now += 31 * 60000;
+  assert.strictEqual(env.call({ a: 'members' }, op.tok).err, 'auth', '운영자도'); assert.strictEqual(env.call({ a: 'log' }, A.admin).err, 'auth', '관리자도');
+  /* 캐시가 비어도(서버가 다시 시작돼도) 시트의 마지막 사용 시각으로 판단 */
+  const t2 = A.tok('쉬는왕', m.pin); env.state.now += 5 * 60000; assert.ok(A.me(t2).ok);
+  Object.keys(env.cache).forEach(k => { if (/^(sa|sw|s):/.test(k)) delete env.cache[k]; });
+  env.state.now += 26 * 60000; assert.ok(A.me(t2).ok, '시트에 적힌 마지막 사용(3분 단위)부터 30분 안');
+  Object.keys(env.cache).forEach(k => { if (/^(sa|sw|s):/.test(k)) delete env.cache[k]; });
+  env.state.now += 31 * 60000; assert.strictEqual(A.me(t2).err, 'auth');
+  env.ctx.dailyMaintenance(); assert.ok(env.ss.getSheetByName('로그인기록').getLastRow() <= 2, '오래 안 쓴 로그인 기록 정리');
 });
 
 console.log(`\n결과: ${ok} 통과 / ${bad} 실패`); process.exit(bad ? 1 : 0);

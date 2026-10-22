@@ -39,7 +39,7 @@
     try { localStorage.setItem('lz.br', LZ.branch); } catch (e) { /* 무시 */ }
   };
   /* 기기 저장소(실패해도 앱이 멈추지 않게). 앱 것은 "lz@app." 아래에 모아 두고, 화면 모드·글씨 크기·매장은 폰 전체 설정 */
-  var SHARED = /^lz\.(theme|fs|hintOff|hintAt|installed|inappOk|branch|br|dev|ref|buzz)$/, NS = 'lz@app.';
+  var SHARED = /^lz\.(theme|fs|hintOff|hintAt|installed|inappOk|branch|br|dev|ref|buzz|keep)$/, NS = 'lz@app.';
   function nk(k) { return /^lz\./.test(k) && !SHARED.test(k) ? NS + k.slice(3) : k; }
   try {                                                                          // 예전 버전 값(lz.○○, 매장별 lz@yangju.○○)을 옮겨 와서 로그인 유지
     if (!localStorage.getItem(NS + 'moved')) {
@@ -54,10 +54,17 @@
       localStorage.setItem(NS + 'moved', '1');
     }
   } catch (e) { /* 무시 */ }
+  /* 로그인 정보(lz.t): "이 휴대폰에서 로그인 유지"를 끄면 브라우저를 닫을 때 지워지는 곳(sessionStorage)에 둠 */
+  function keepOff() { try { return localStorage.getItem('lz.keep') === '0'; } catch (e) { return false; } }
   u.store = {
-    get: function (k) { try { return localStorage.getItem(nk(k)); } catch (e) { return null; } },
-    set: function (k, v) { try { localStorage.setItem(nk(k), v); return true; } catch (e) { return false; } },
-    del: function (k) { try { localStorage.removeItem(nk(k)); } catch (e) { /* 무시 */ } },
+    get: function (k) { try { var v = localStorage.getItem(nk(k)); if (v === null && k === 'lz.t') v = sessionStorage.getItem(nk(k)); return v; } catch (e) { return null; } },
+    set: function (k, v) {
+      try {
+        if (k === 'lz.t') { if (keepOff()) { sessionStorage.setItem(nk(k), v); localStorage.removeItem(nk(k)); return true; } try { sessionStorage.removeItem(nk(k)); } catch (e2) { /* 무시 */ } }
+        localStorage.setItem(nk(k), v); return true;
+      } catch (e) { return false; }
+    },
+    del: function (k) { try { localStorage.removeItem(nk(k)); if (k === 'lz.t') sessionStorage.removeItem(nk(k)); } catch (e) { /* 무시 */ } },
     getJSON: function (k) { try { return JSON.parse(u.store.get(k)); } catch (e) { return null; } },
     setJSON: function (k, v) { return u.store.set(k, JSON.stringify(v)); }
   };
@@ -106,6 +113,17 @@
   u.side = function (d) { return d === 'L' ? '좌측' : '우측'; };
   /* 타격감: 17 = 50M, 1마다 5M → "17(50M) 정도" */
   u.pwM = function (p) { return 5 * p - 35; };
+  /* 홀 거리와 타격감 비교 표시: 2M 이내 초록 ● / 더 세게 빨간 ▲, 더 약하게 파란 ▼
+   * 5M 이하 1개, 10M 이하 2개, 15M 이하 3개, 20M 이하 4개, 그보다 크면 5개, 25M 이상이면 5개 뒤에 ↑ ↓ */
+  u.pwDiff = function (p, m) { p = +p; m = +m; if (!(p >= 8 && p <= 40) || !(m > 0)) return null; return Math.round((u.pwM(p) - m) * 10) / 10; };
+  u.pwMark = function (p, m, o) {
+    var d = u.pwDiff(p, m); if (d === null) return '';
+    var a = Math.abs(d), num = o && o.num;
+    if (a <= 2) return '<span class="pwk ok" role="img" aria-label="홀 거리와 맞아요' + (a ? ' (' + u.fm(a) + 'M 차이)' : '') + '"><i>●</i>' + (num ? '<small>거리와 맞음</small>' : '') + '</span>';
+    var n = Math.min(5, Math.ceil(a / 5)), up = d > 0, far = a >= 25;
+    return '<span class="pwk ' + (up ? 'up' : 'dn') + '" role="img" aria-label="홀 거리보다 ' + u.fm(a) + 'M ' + (up ? '더 세게' : '더 약하게') + '"><i>' + new Array(n + 1).join(up ? '▲' : '▼') + (far ? '<b class="far">' + (up ? '↑' : '↓') + '</b>' : '') + '</i>' +
+      (num ? '<small>' + (up ? '+' : '−') + u.fm(a) + 'M ' + (up ? '세게' : '약하게') + '</small>' : '') + '</span>';
+  };
   u.pwText = function (p) { return p ? p + '(' + u.pwM(p) + 'M) 정도' : ''; };
   u.filled = function (a) { var n = 0; for (var i = 0; i < a.length; i++) if (a[i] && a[i].r) n++; return n; };
   function base(r) { return r.r === 'f' ? '최초화면' : r.r === 'c' ? '홀컵' : (r.t || '내가 정한 곳'); }
@@ -113,10 +131,10 @@
     if (!r || !r.r) return null;
     return (r.n ? base(r) + '에서 ' + u.side(r.d) + ' ' + r.n + '칸' : base(r) + ' 그대로') + (r.p ? ' · 타격감 ' + u.pwText(r.p) : '');
   };
-  u.sentHTML = function (r) {
+  u.sentHTML = function (r, m) {                                           // m: 홀 거리(있으면 타격감 옆에 ● ▲ ▼)
     if (!r || !r.r) return '<span class="none">아직 기록하지 않았어요</span>';
     var b = u.esc(base(r));
-    return (r.n ? b + '에서 <span class="dv ' + r.d + '">' + u.side(r.d) + ' ' + r.n + '칸</span>' : b + ' 그대로') + (r.p ? '<span class="pw">타격감 ' + u.pwText(r.p) + '</span>' : '');
+    return (r.n ? b + '에서 <span class="dv ' + r.d + '">' + u.side(r.d) + ' ' + r.n + '칸</span>' : b + ' 그대로') + (r.p ? '<span class="pw">타격감 ' + u.pwText(r.p) + (m ? u.pwMark(r.p, m) : '') + '</span>' : '');
   };
   u.base = base;
   /* 날짜 'YYYY-MM-DD' → '10월 21일' / 기간 표시 */
