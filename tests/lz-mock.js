@@ -92,7 +92,7 @@ function createEnv(opts) {
       getAll: ks => { const o = {}; ks.forEach(k => { const e = cache[k]; if (e && e.exp > state.now) o[k] = e.v; }); return o; },
       putAll: (o, sec) => { Object.keys(o).forEach(k => { if (String(o[k]).length > 100000) throw new Error('Argument too large'); cache[k] = { v: String(o[k]), exp: state.now + (sec || 600) * 1000 }; }); } }) },
     Utilities: {
-      getUuid: () => crypto.randomUUID(), formatDate: fmtDate,
+      getUuid: () => crypto.randomUUID(), formatDate: fmtDate, sleep: () => {},
       DigestAlgorithm: { SHA_256: 'SHA_256' }, Charset: { UTF_8: 'UTF_8' },
       computeDigest: (algo, s) => Array.from(crypto.createHash('sha256').update(String(s), 'utf8').digest()).map(b => (b > 127 ? b - 256 : b)) // 부호 있는 바이트
     },

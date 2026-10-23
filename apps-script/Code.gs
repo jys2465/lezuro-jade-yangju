@@ -16,7 +16,7 @@
  */
 
 var APP = 'parkgolf-note';
-var VER = 3.1;
+var VER = 3.2;
 var TZ = 'Asia/Seoul';
 var SERVICE = '파크골프 공략노트';
 /** 관리자 닉네임. setup() 이 이 닉네임으로 관리자 계정을 만듭니다(이미 있으면 관리자로 바꿉니다). */
@@ -87,6 +87,8 @@ function doPost(e) {
     var raw = (e && e.postData && e.postData.contents) || '';
     if (raw.length > LIM.reqMax) throw E_('big', '보내는 내용이 너무 커요');
     var q = JSON.parse(raw);
+    var mv = cfg_().moved_to;                                             // 수파베이스로 옮긴 뒤: 예전 서버는 더 이상 받지 않음(자료가 두 곳으로 나뉘지 않게)
+    if (mv) throw E_('moved', '서버를 새 곳으로 옮겼어요. 앱을 완전히 닫았다가 다시 열어 주세요.', { to: String(mv) });
     var h = H[q.a];
     if (!h) throw E_('bad', '알 수 없는 요청이에요');
     if (q.br === undefined && q.b) q.br = q.b;                        // 예전 화면(v2)은 매장 코드를 b 로 보냄
@@ -108,6 +110,7 @@ function run_(h, ctx, q) {
   if (!lock.tryLock(20000)) throw E_('busy', '지금 다른 분이 저장 중이에요. 잠시 뒤에 다시 해 주세요.');
   try {
     resetMemo_();                                                           // 기다리는 동안 다른 요청이 바꾼 내용을 다시 읽음
+    if (settings_().moved_to) throw E_('moved', '서버를 새 곳으로 옮겼어요. 앱을 완전히 닫았다가 다시 열어 주세요.');   // 기다리는 사이에 옮겨졌으면 저장하지 않음
     if (ctx && ctx.u) { var fresh = userByUid_(ctx.u.uid); if (!fresh || !fresh.active) throw E_('auth', '이 계정은 지금 쓸 수 없어요. 운영자에게 문의해 주세요.'); ctx.u = fresh; }   // 기다리는 동안 바뀐 회원 정보(결제 승인·삭제로 줄이 밀림 등)를 다시 읽음
     return h.fn(q, ctx);
   }

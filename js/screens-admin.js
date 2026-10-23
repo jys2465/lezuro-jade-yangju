@@ -2,7 +2,7 @@
 (function () {
   'use strict';
   var LZ = window.LZ, u = LZ.u, ui = LZ.ui, $ = u.$, $$ = u.$$, esc = u.esc, S = LZ.S, P = LZ.pwa;
-  var VERSION = '3.1.2';
+  var VERSION = '3.2.0';
   LZ.appVersion = VERSION;
   LZ.appUrl = function () { return location.origin + location.pathname.replace(/index\.html$/, ''); };
 
